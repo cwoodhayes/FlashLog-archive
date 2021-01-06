@@ -1,0 +1,6 @@
+*.bin
+*.bindump
+*.hexdump
+*.log
+screenlog.*
+*.csv
