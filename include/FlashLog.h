@@ -28,8 +28,8 @@
 //it's nice to test with a shorter log so the tests don't take ages.
 #define LOG_START_ADDR 			FLASH_START_ADDR
 
-#if HALVE_FLASHLOG					
-#define LOG_END_ADDR 				(FLASH_END_ADDR/2)
+#if FL_REDUCE_SIZE
+#define LOG_END_ADDR 				(FLASH_END_ADDR/512)
 #else //DEBUG-BUILD
 #define LOG_END_ADDR				FLASH_END_ADDR
 #endif

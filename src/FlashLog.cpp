@@ -716,7 +716,9 @@ int FlashLog::writePacket(uint8_t type, void *packet, ptimer_t pwr_ctr, ptimer_t
 int FlashLog::wipeLog(bool complete)
 {
     // buffer that only contains 0xFF to program the log with
-    static uint8_t eraseBuffer[SD_BLOCK_SIZE] = {0xFF};
+    static uint8_t eraseBuffer[SD_BLOCK_SIZE];
+    memset(eraseBuffer, 0xFF, SD_BLOCK_SIZE);
+
     int err=0;
     // hopefully the block device size is always a clean multiple of the sector size
     MBED_ASSERT(sdBlockDev.size() % SD_BLOCK_SIZE == 0);
@@ -726,12 +728,22 @@ int FlashLog::wipeLog(bool complete)
     size_t lastPacketAddress = nextPacketAddr;
     // now erase sectors in order
     pc.printf("Erasing flash log (0x%016x - 0x%016" PRIx64 ").\r\n", LOG_START_ADDR, complete?LOG_END_ADDR:lastPacketAddress);
+
+    float prevProgress = 0;
+
     for(bd_addr_t addr = LOG_START_ADDR; addr+erase_size<=LOG_END_ADDR; addr += erase_size)
     {
         if(complete == false && addr > lastPacketAddress){
             break;
         }
-        pc.printf("(%.02f%%)\r\n", ( (double) addr / (LOG_CAPACITY))*100);
+
+        // Print progress if process has advanced at least 0.01%
+        float progress = ( (double) addr / (LOG_CAPACITY))*100;
+        if(progress - prevProgress > .01)
+		{
+        	prevProgress = progress;
+			pc.printf("(%.02f%%)\r\n", progress);
+		}
 
 		if(FL_IS_SPI_FLASH)
 		{
