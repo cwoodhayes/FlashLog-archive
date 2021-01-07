@@ -105,17 +105,23 @@ bool FlashLog::logExists(FLResultCode *err) {
 FLResultCode FlashLog::findLastPacket() {
     FLResultCode err = FL_SUCCESS;
     bd_addr_t start=LOG_START_ADDR, end=LOG_END_ADDR, middle;
-    const size_t searchBlockSize = (2*MAX_PACKET_LEN + SD_BLOCK_SIZE - 1)/SD_BLOCK_SIZE * SD_BLOCK_SIZE; //needs to be 2*max for when we find the END of the last packet
+
+    // If the block size is > 2*max, then we need to search based on that in order to handle blanks of up to SD_BLOCK_SIZE - 1
+    // Otherwise, needs to be 2*max for when we find the END of the last packet.
+    const size_t searchBlockSize = (2*MAX_PACKET_LEN + SD_BLOCK_SIZE - 1)/SD_BLOCK_SIZE * SD_BLOCK_SIZE;
+
     static uint8_t buf[searchBlockSize];
-    MBED_ASSERT(end - start > 2 * searchBlockSize);
+    MBED_ASSERT(end - start >= 2 * searchBlockSize); // make sure that the loop is actually entered
 
     //binary search until we're somewhere inside the last packet
     bool isPacket = false;
-    while ( static_cast<size_t>(end - start) >= 2*searchBlockSize) {
-        //here be packets? yarr?
+    while ( static_cast<bd_size_t>(end - start) >= 2*searchBlockSize) {
+
+    	//here be packets? yarr?
+
+        // We will check searchBlockSize bytes starting from the middle of the current memory region, given here.
         middle = start/2+end/2;    //2 divisions to avoid unsigned overflow
 
-        MBED_ASSERT(middle % SD_BLOCK_SIZE == 0);
         FLResultCode readError = readFromLog(buf, middle, searchBlockSize);
 
         if(readError)
@@ -131,7 +137,7 @@ FLResultCode FlashLog::findLastPacket() {
             }
         }
 #ifdef FL_DEBUG
-        pc.printf("\t%016" PRIX64 "-%016" PRIX64 " (mid=%016" PRIX64 ")\r\n", start, end, middle);
+        pc.printf("\tBinary search: checking middle of 0x%016" PRIX64 "-0x%016" PRIX64 " range (0x%016" PRIX64 ") for any packet data\r\n", start, end, middle);
         PRINT_BYTES(buf, MAX_PACKET_LEN);
         pc.printf("\r\n");
 #endif
@@ -148,6 +154,7 @@ FLResultCode FlashLog::findLastPacket() {
 
     // The end of the last packet is now somewhere between `start` and `end`
 #ifdef FL_DEBUG
+	readFromLog(buf, start, searchBlockSize);
     pc.printf("discovered end of logfile near %016" PRIX64 ". Printing buffer contents:\r\n", start);
     PRETTYPRINT_BYTES(buf, searchBlockSize, start);
 #endif
@@ -165,7 +172,8 @@ FLResultCode FlashLog::findLastPacket() {
 	}
 
 #ifdef FL_DEBUG
-    PRETTYPRINT_BYTES(buf, 2*MAX_PACKET_LEN, approx_last_packet_begin);
+	pc.printf("Last packet must begin <1 search block after %016" PRIX64 ". Printing buffer contents:\r\n", approx_last_packet_begin);
+	PRETTYPRINT_BYTES(buf, 2*MAX_PACKET_LEN, approx_last_packet_begin);
 #endif
     uint32_t lastDirtyByte =0;
     for (size_t i=0; i<2*MAX_PACKET_LEN; i++) {
