@@ -14,7 +14,7 @@
 #include <inttypes.h>
 
 #include "Packet.h"
-#include "FlashLogConfig.h"
+#include <FlashLogConfig.h>
 
 #include <mbed.h>
 #include <BlockDevice.h>
@@ -77,7 +77,7 @@ enum FLResultCode
  */
 #define FLASHLOG_BINARY_ITERATE(FLASHLOG_PTR, FRAME) \
 				for (int ITERATION_STATUS = (FLASHLOG_PTR)->binaryDumpIterator(&FRAME, true); \
-						 ITERATION_STATUS != ERROR_ITERATION_DONE;	\
+						 ITERATION_STATUS != FL_ITERATION_DONE;	\
 						 ITERATION_STATUS = (FLASHLOG_PTR)->binaryDumpIterator(&FRAME, false))
 
 /**

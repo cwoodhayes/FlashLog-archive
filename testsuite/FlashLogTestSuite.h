@@ -1,7 +1,5 @@
 #pragma once
 
-#include <UBloxGPS.h>
-
 class FlashLogHarness : public FlashLog
 {
 	public:
@@ -102,7 +100,7 @@ class FlashLogHarness : public FlashLog
 		 * @brief      Dump the entirety of the log's bytes in raw binary
 		 * @return     err
 		 */
-		int test_dump_binary(Serial &pc);
+		int test_dump_binary(Stream &pc);
 
 		/**
 		 * @brief      Check that the log is empty
@@ -153,7 +151,7 @@ class FlashLogHarness : public FlashLog
 		 *
 		 * @return     err
 		 */
-		int write_pattern(uint32_t pattern, uint32_t start_addr, uint32_t len);
+		int write_pattern(uint32_t pattern, bd_addr_t start_addr, bd_size_t len);
 
 		/**
 		 * @brief      Checks that a pattern has been correctly written across the memory
@@ -164,13 +162,13 @@ class FlashLogHarness : public FlashLog
 		 *
 		 * @return     0 if the pattern is correctly written, -1 otherwise
 		 */
-		int check_pattern(uint32_t pattern, uint32_t start_addr, uint32_t len);
+		int check_pattern(uint32_t pattern, bd_addr_t start_addr, bd_size_t len);
 
 
 		/* Global variables for use in all test functions: */
-		Timer64 flightTimer;
-		Timer64 powerTimer;
-		enum State fsmState;
+		Timer flightTimer;
+		Timer powerTimer;
+		FL_STATE_T fsmState = FL_INVALID_STATE;
 };
 
 //test packet instantiation
@@ -184,7 +182,7 @@ struct log_packet_gps tp_gps
 	2.1,
 	2.2,
 	2.3,
-	UBloxGPS::GPSFix::FIX_3D,
+	3,
 	10,
 	3,
 	21,
