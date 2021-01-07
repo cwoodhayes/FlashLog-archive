@@ -14,8 +14,6 @@
 #include "FlashLog.h"
 #include "SerialStream.h"
 
-extern SerialStream<BufferedSerial> pc;
-
 #define FL_DEBUG
 
 FlashLog::FlashLog(BlockDevice & _blockDev, Stream & _pc):
@@ -289,7 +287,7 @@ int FlashLog::writeToLog(const void *buffer, bd_addr_t addr, bd_size_t size)
         }
 
         lastWrite = UINT64_MAX; // next write is at start of buffer
-        // reset timeoutBuffer to all 0s
+        // reset timeoutBuffer to all FFs
         memset(timeoutBuffer, 0xFF, SD_BLOCK_SIZE);
         flashlogTimer.reset();
 
@@ -729,7 +727,16 @@ int FlashLog::wipeLog(bool complete)
             break;
         }
         pc.printf("(%.02f%%)\r\n", ( (double) addr / (LOG_CAPACITY))*100);
-        err = sdBlockDev.program(eraseBuffer, addr, SD_BLOCK_SIZE);
+
+		if(FL_IS_SPI_FLASH)
+		{
+			sdBlockDev.erase(addr, erase_size);
+		}
+		else
+		{
+			err = sdBlockDev.program(eraseBuffer, addr, SD_BLOCK_SIZE);
+
+		}
         Watchdog::get_instance().kick();
     }
     pc.printf("[FlashLog] Erase finished!\r\n");
@@ -1169,9 +1176,6 @@ size_t getPacketLen(uint8_t type) {
 		case LOG_POWER:        return sizeof(struct log_packet_power);
 		case LOG_ADIS:        return sizeof(struct log_packet_adis);
 		default:
-#ifdef FL_DEBUG
-			pc.printf("[FlashLog] Error -- attempt to find length of undefined packet\r\n");
-#endif //FL_DEBUG
 			return 0;
 	}
 }
@@ -1192,7 +1196,7 @@ size_t getPacketLen(uint8_t type) {
 
  @return     { description_of_the_return_value }
 */
-int findTailInBuffer(uint8_t *buf, size_t len, bool reverse) {
+int FlashLog::findTailInBuffer(uint8_t *buf, size_t len, bool reverse) {
     uint16_t mag1_candidate;
     uint8_t mag2_candidate;
     int i=0, i_end=len-3, inc=1;

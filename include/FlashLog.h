@@ -90,17 +90,6 @@ enum FLResultCode
 size_t getPacketLen(uint8_t type);
 
 /**
- * @brief      Finds the location of a packet tail, if any, inside a given buffer
- *
- * @param[in]  buf      The input buffer
- * @param[in]  len      The length of the input buffer
- * @param[in]  reverse  If false, the first packet tail is found. If true, the last packet tail in buf is found
- *
- * @return     Distance of the tail's start from the start of buf, in bytes
- */
-int findTailInBuffer(uint8_t *buf, size_t len, bool reverse=false);
-
-/**
  * @brief      Determines if a given buffer is a packet tail.
  *
  * @param      buf   The buffer
@@ -426,6 +415,17 @@ protected:
 	{
 		return ((address + SD_BLOCK_SIZE - 1) / SD_BLOCK_SIZE) * SD_BLOCK_SIZE;
 	}
+
+	/**
+	 * @brief      Finds the location of a packet tail, if any, inside a given buffer
+	 *
+	 * @param[in]  buf      The input buffer
+	 * @param[in]  len      The length of the input buffer
+	 * @param[in]  reverse  If false, the first packet tail is found. If true, the last packet tail in buf is found
+	 *
+	 * @return     Distance of the tail's start from the start of buf, in bytes
+	 */
+	int findTailInBuffer(uint8_t *buf, size_t len, bool reverse=false);
 
 };
 
