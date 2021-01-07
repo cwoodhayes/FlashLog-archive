@@ -8,12 +8,9 @@
 #define PACKET_H
 
 #include <mbed.h>
-#include "Timer64.h"
 #include <inttypes.h>
-#include "States.h"
-#include "HamsterSensor.h"
 
-#include <UBloxGPS.h>
+#include <FlashLogConfig.h>
 
 /*
  * IMPORTANT: How to add a new packet
@@ -39,21 +36,6 @@
 #define LOG_ADIS  0x09
 #define LOG_END_TYPEID 0xA
 
-const HamsterSensors::HamsterSensor FLASH_LOG_ID_TO_HAMSTER_SENSOR[] = {
-  HamsterSensor::END_ENUM_HAMSTERSENSOR, //this doesnt map to an actual sensor, so assign it to END_ENUM_HAMSTERSENSOR
-  HamsterSensor::SENSOR_TEMP,
-  HamsterSensor::SENSOR_ADXL,
-  HamsterSensor::SENSOR_IMU,
-  HamsterSensor::SENSOR_GPS,
-  HamsterSensor::SENSOR_BARO,
-  HamsterSensor::END_ENUM_HAMSTERSENSOR,
-  HamsterSensor::SENSOR_POWER,
-  HamsterSensor::SENSOR_ADIS,
-  HamsterSensor::END_ENUM_HAMSTERSENSOR
-};
-
-static_assert(sizeof(FLASH_LOG_ID_TO_HAMSTER_SENSOR) / sizeof(*FLASH_LOG_ID_TO_HAMSTER_SENSOR) == LOG_END_TYPEID, //including END_ENUM_STATE
-  "FLASH_LOG_ID_TO_HAMSTER_SENSOR not fully defined");
 
 #define LOG_PACKET_MAGIC1 0xAAAA
 #define LOG_PACKET_MAGIC2 0xAA
@@ -99,7 +81,7 @@ struct packet_tail {
            \r\ntail.flight_ctr = %" PRIu64 "; \r\ntail.checksum = %08" PRIX32 "   \
            \r\ntail.magic3 = %08" PRIX32 "\r\n", \
             (PACKET_TAIL).magic1, (PACKET_TAIL).magic2, \
-            stringifyState((enum State) (PACKET_TAIL).state), (PACKET_TAIL).typeID, \
+            FL_GET_STATE_NAME((PACKET_TAIL).state), (PACKET_TAIL).typeID, \
             (PACKET_TAIL).pwr_ctr, (PACKET_TAIL).flight_ctr, \
             (PACKET_TAIL).checksum, (PACKET_TAIL).magic3)
 
@@ -194,7 +176,7 @@ struct log_packet_gps
 	float height;
 
 	// Quality of the current fix
-	UBloxGPS::GPSFix fixQuality;
+	uint8_t fixQuality;
 
 	// Estimate of the accuracy of the current position in meters
 	float posAccuracy;

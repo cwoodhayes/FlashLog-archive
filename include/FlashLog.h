@@ -14,9 +14,11 @@
 #include <inttypes.h>
 
 #include "Packet.h"
-#include "States.h"
-#include "mbed.h"
-#include "SDBlockDevice.h"
+#include "FlashLogConfig.h"
+
+#include <mbed.h>
+#include <BlockDevice.h>
+#include <Stream.h>
 
 #define FLASH_START_ADDR 		0x000000000
 #define FLASH_END_ADDR 			0x200000000 //for an 8GB microSD Card
@@ -37,20 +39,23 @@
 // how far backward restoreFSMState() will look for a valid packet to read state info from
 #define MAX_PACKETS_TO_CHECK 10
 
-#define SUCCESS 0
-#define ERROR_BOUNDS -1
-#ifdef ERROR_EMPTY
-	#undef ERROR_EMPTY
-#endif
-#define ERROR_EMPTY -2
-#define ERROR_CHECKSUM -3
-#define ERROR_TYPE -4
-#define ERROR_NOTAIL -5
-#define ERROR_LOGNOINIT -6
-#define ERROR_FSM_NOT_RESTORED -7
-#define ERROR_ITERATION_DONE -8
-#define ERROR_LOG_EXISTS -9 //not exactly a warning--just make sure to restore the FSM
-#define ERROR_SDBD_INIT -10
+enum FLResultCode
+{
+	FL_SUCCESS = 0,
+
+	FL_ITERATION_DONE = -8, // Indicates that this iterator has reached the end
+
+	FL_ERROR_BOUNDS = -1, // Log is full and/or the current operation would go out of bounds
+	FL_ERROR_EMPTY = -2, // Indicates that the flashlog is empty
+	FL_ERROR_CHECKSUM = -3,
+	FL_ERROR_TYPE  = -4,
+	FL_ERROR_NOTAIL = -5,
+	FL_ERROR_LOGNOINIT = -6, // Log did not init successfully earlier, so can't perform this operation
+	FL_ERROR_FSM_NOT_RESTORED = -7, // Failed to find a valid packet from which to restore state.
+	FL_ERROR_LOG_EXISTS = -9, // Indicates that the flashlog is not empty but the last packet could not be found
+	FL_ERROR_BD_INIT = -10, // Error initializing block device
+	FL_ERROR_BD_IO = -11, // Error reading to or writing from block device
+};
 
 #define SD_BLOCK_SIZE 512
 
@@ -118,12 +123,10 @@ public:
 	/**
 	 * @brief      Constructs the object.
 	 *
-	 * @param      power   pointer to the power-on timer
-	 * @param      flight  pointer to the flight timer
-     * @param      flashlogTimer pointer to the flashlog timer
-	 * @param      s       Pointer to the HAMSTER FSM state
+	 * @param      _blockDev   Block device to use to store data
+	 * @param      _pc  Output stream to print messages on
 	 */
-	FlashLog(Timer *power, Timer *flight, Timer *flashlogTimer, const enum State *s);
+	FlashLog(BlockDevice & _blockDev, Stream & _pc);
 
 	/**
 	 * @brief      Destroys the object.
@@ -131,28 +134,34 @@ public:
 	~FlashLog();
 
 	/**
-	 * @brief      Initialize the log upon power-on
+	 * @brief      Initialize the log upon power-on,
+	 * Also initializes the underlying block devuce
 	 *
-	 * @return     true if log is non-empty; false if empty
+	 * @return     Pair of FlashLog error code and block device error code.
+	 * First element is BD_ERROR_OK if no block device error, and the BD error code otherwise.
+	 * Second element is FL_SUCCESS if no error, FL_ERROR_EMPTY if empty (this is not an actual error), or the FlashLog error code otherwise.
 	 */
-	int initLog();
+	std::pair<bd_error, FLResultCode> initLog();
 
 	/**
 	 * @brief      Sets the power timer, flight timer, and FSM state to their last recorded values
 	 *
 	 * @return     SUCCESS, or an ERROR 
 	 */
-	int restoreFSMState(State *s, uint64_t *pwr_ctr, uint64_t *flight_ctr);
+	FLResultCode restoreFSMState(FL_STATE_T *s, ptimer_t *pwr_ctr, ptimer_t *flight_ctr);
 
 	/**
 	 * @brief      Writes a packet to the log
 	 *
 	 * @param[in]  type  The packet type
-	 * @param[in]  data  Buffer containing the packet's bits
+	 * @param[in]  packet  Buffer containing the packet's bits
+	 * @param pwr_ctr Current power counter
+	 * @param flight_ctr Current flight counter
+	 * @param state Current state of the application
 	 *
 	 * @return     { description_of_the_return_value }
 	 */
-	int writePacket(uint8_t type, void *data); 
+	int writePacket(uint8_t type, void *packet, ptimer_t pwr_ctr, ptimer_t flight_ctr, FL_STATE_T state);
 
 	/**
 	 * @brief      Erase the contents of the log
@@ -169,9 +178,9 @@ public:
 	 * 									  If false, continue where you left off.
 	 *
 	 * @return     SUCCESS                  - read successful, call again
-	 *             ERROR_ITERATION_DONE     - end of log reached, throw away this packet and do not call again
+	 *             ITERATION_DONE           - end of log reached, throw away this packet and do not call again
 	 */
-	int binaryDumpIterator(struct log_binary_dump_frame *frame, bool begin);
+	FLResultCode binaryDumpIterator(struct log_binary_dump_frame *frame, bool begin);
 
 	/**
 	 * @brief      Reads the next `sizeof(log_binary_dump_frame)` bytes from the memory in reverse.
@@ -181,9 +190,9 @@ public:
 	 *                                    If false, continue where you left off.
 	 *
 	 * @return     SUCCESS  				- read successful, call again
-	 *             ERROR_ITERATION_DONE     - end of log reached, throw away this packet and do not call again
+	 *             ITERATION_DONE     - end of log reached, throw away this packet and do not call again
 	 */
-	int binaryDumpReverseIterator(struct log_binary_dump_frame *frame, bool begin);
+	FLResultCode binaryDumpReverseIterator(struct log_binary_dump_frame *frame, bool begin);
 
 
 
@@ -220,7 +229,7 @@ public:
 	 * 
 	 * @return one of [SUCCESS, ERROR_EMPTY]
 	 */
-	int readTailAt(bd_addr_t addr, struct packet_tail* buf);
+	FLResultCode readTailAt(bd_addr_t addr, struct packet_tail* buf);
 
 	/**
 	 * @brief check whether the provided tail and packet including the tail are valid together
@@ -273,7 +282,7 @@ protected:
 	 *
 	 * @return     SUCCESS or an ERROR
 	 */
-	int packetIterator(uint8_t *type, void *buf, bool begin);
+	FLResultCode packetIterator(uint8_t *type, void *buf, bool begin);
 
 	/**
 	 * @brief      DEBUG ONLY. Reads the last packet in the log.
@@ -283,7 +292,7 @@ protected:
 	 *
 	 * @return     SUCCESS or ERROR
 	 */
-	int readLastPacket(uint8_t type, void *buf);
+	FLResultCode readLastPacket(uint8_t type, void *buf);
 
 	/**
 	 * @brief      Prints the last N bytes in the log
@@ -320,33 +329,29 @@ protected:
     int writeToLog(const void *buffer, bd_addr_t addr, bd_size_t size);
 
     /**
-     * @brief Read from log to buffer, copying to temporary buffer
-     * intermediately
+     * @brief Read from log to buffer.
+     * Does NOT need to be aligned in any way.
+     * If an error is returned the data in the buffer is undefined.
      *
      * @param buffer Buffer to write blocks to
      * @param addr Address of block to begin reading from
      * @param size Size to read in bytes
      *
-     * @return BD_ERROR_OK(0) - success SD_BLOCK_DEVICE_ERROR_NO_DEVICE - device
-     * (SD card) is missing or not connected SD_BLOCK_DEVICE_ERROR_CRC - crc
-     * error SD_BLOCK_DEVICE_ERROR_PARAMETER - invalid parameter
-     * SD_BLOCK_DEVICE_ERROR_NO_RESPONSE - no response from device
-     * SD_BLOCK_DEVICE_ERROR_UNSUPPORTED - unsupported command
+     * @return FL_SUCCESS or error code
      */
-    int readFromLog(void *buffer, bd_addr_t addr, bd_size_t size);
+	FLResultCode readFromLog(void *buffer, bd_addr_t addr, bd_size_t size);
+
+    Stream & pc;
 
     /**
-     * The flash chip is a block device, and FlashLog is built on top of SDBlockDevice
+     * The flash chip is a block device, and FlashLog is built on top of the block device
      */
-	SDBlockDevice sdBlockDev;
+	BlockDevice & sdBlockDev;
 	bd_addr_t nextPacketAddr;		//next empty address in the log
 	bd_addr_t nextPacketToRead;	//next packet in a read-through of the log
 
 // private:
-    Timer *powerTimerPtr;			// pointer to the HAMSTER power timer
-    Timer *flightTimerPtr;		// pointer to the HAMSTER flight timer
-    Timer *flashlogTimerPtr; // pointer to SD card timeout timer
-    const enum State *sPtr;						// pointer to the HAMSTER fsm state
+    Timer flashlogTimer; // pointer to SD card timeout timer
 
     bd_addr_t lastTailAddr;			// address of the last tail in the log
     uint8_t lastPacketType;			// type of the last packet in the log
@@ -365,21 +370,23 @@ protected:
     // SDBlockDevice::program
     bd_addr_t firstWritePosition = 0;
 
-    /**
-	 * @brief      Returns true if the log is non-empty
-	 *
-	 * @param      err[out]   sdblockdevice error
-	 *
-	 * @return     SUCCESS or ERROR
-	 */
-	bool logExists(int *err);		
+	/** Returns true if a log already exists on the chip.
 
-	/**
-	 * @brief      Uses binary search to find the last packet in the log
-	 *
-	 * @return     SUCCESS or ERROR
-	 */
-	int findLastPacket();		
+	 Currently, it just checks the first 90 bytes for any zero bits (erased sectors are always 0xFF).
+	 Might want to give it an error tolerance of a bit flip or two, just in case.
+
+	 @param      err   The error encountered when reading the log data, if any
+
+	 @return     true if log exists
+	*/
+	bool logExists(FLResultCode *err);
+
+	/** Uses binary search to find the last packet written, and then populate the
+	 lastTailAddr, nextPacketAddr, and lastPacketType data members.
+
+	 @return     error or success
+	*/
+	FLResultCode findLastPacket();
 
 	/**
 	 * @brief      Populates the tail of a given packet with the proper data
@@ -388,7 +395,7 @@ protected:
 	 * @param[in]  len     The packet length
 	 * @param      packet  A buffer containing the packet
 	 */
-	void populatePacketTail(uint8_t type, size_t len, void *packet);
+	void populatePacketTail(uint8_t type, size_t len, void *packet, ptimer_t pwr_ctr, ptimer_t flight_ctr, FL_STATE_T state);
 
 	/**
 	 * @brief      Calculates the checksum for a given packet
@@ -399,6 +406,29 @@ protected:
 	 * @return     The packet's checksum.
 	 */
 	checksum_t calculateChecksum(size_t len, void *packet);
+
+	/**
+	 * Round the given address down to the nearest block
+	 * start address.
+	 * If given a block start address, returns it unchanged.
+	 * @param address
+	 */
+	inline bd_addr_t roundDownToNearestBlock(bd_addr_t address)
+	{
+		return (address / SD_BLOCK_SIZE) * SD_BLOCK_SIZE;
+	}
+
+	/**
+	 * Round the given address up to the nearest block
+	 * start address.
+	 * If given a block start address, returns it unchanged.
+	 * @param address
+	 */
+	inline bd_addr_t roundUpToNearestBlock(bd_addr_t address)
+	{
+		return ((address + SD_BLOCK_SIZE - 1) / SD_BLOCK_SIZE) * SD_BLOCK_SIZE;
+	}
+
 };
 
 #endif 

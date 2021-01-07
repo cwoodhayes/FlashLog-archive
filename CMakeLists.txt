@@ -11,7 +11,8 @@ endif()
 set(FLASHLOG_SOURCES
     src/FlashLog.cpp
     include/FlashLog.h
-    include/Packet.h)
+    include/Packet.h
+    ${FLASHLOG_CONFIG_HEADER})
 
 set(TEST_FLASH_SOURCES
     testsuite/FlashLogTestSuite.h
@@ -19,6 +20,10 @@ set(TEST_FLASH_SOURCES
 
 add_library(flashlog STATIC ${FLASHLOG_SOURCES})
 target_link_libraries(flashlog mbed-os)
+target_include_directories(flashlog PUBLIC include)
+
+# disable a warning that isn't relevant here
+target_compile_options(flashlog PRIVATE -Wno-type-limits)
 
 # include directory where the config header is
 get_filename_component(CONFIG_HEADER_DIR ${FLASHLOG_CONFIG_HEADER} DIRECTORY)
