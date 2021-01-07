@@ -359,10 +359,8 @@ protected:
     int packetsWritten;		//this is wrong after a brownout, so don't depend on it
 
 
-	//buffer that only contains zeros to allow the SD Card to be overwritten with zeros
-	uint8_t zeroBuffer[SD_BLOCK_SIZE] = {0};
     // buffer that fills before timeout to allow writing in blocks
-    uint8_t timeoutBuffer[SD_BLOCK_SIZE] = {0};
+    uint8_t timeoutBuffer[SD_BLOCK_SIZE] = {0xFF};
     // address of the last write to get difference for positioning inside
     // timeoutBuffer
     bd_addr_t lastWrite = UINT64_MAX;

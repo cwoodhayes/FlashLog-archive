@@ -235,9 +235,6 @@ int FlashLog::writeToLog(const void *buffer, bd_addr_t addr, bd_size_t size)
     // so returning 0 does *not* mean successful write, it means the *last*
     // write was successful or there was not a write
 
-    // TODO edge case where positionToWrite > SD_BLOCK_SIZE on its own. this is
-    // actually multiple critical memory leaks if it occurs, so fix this soon!
-
     int positionToWrite = 0;
     if(addr > lastWrite)
     {
@@ -254,23 +251,38 @@ int FlashLog::writeToLog(const void *buffer, bd_addr_t addr, bd_size_t size)
 
     lastWrite = addr; // start of next "previous" write
 
-    if(size + positionToWrite > SD_BLOCK_SIZE)
+    if(positionToWrite >= SD_BLOCK_SIZE)
     {
-        // write current temporary buffer and maximum leftover size
-        memcpy(&timeoutBuffer[positionToWrite], buffer,
-               SD_BLOCK_SIZE - positionToWrite);
+        // if the next write is after the end of the block, flush current block,
+        // set firstWritePosition, and follow logic as expected
+
         err = sdBlockDev.program(timeoutBuffer, firstWritePosition,
                                  SD_BLOCK_SIZE);
 
-        firstWritePosition = addr + SD_BLOCK_SIZE - positionToWrite;
+        memset(timeoutBuffer, 0xFF, SD_BLOCK_SIZE);
+        flashlogTimer.reset();
 
-        int leftoverSize = size - (SD_BLOCK_SIZE - positionToWrite);
+        firstWritePosition = addr;
+        lastWrite = firstWritePosition;
+        positionToWrite = 0;
+    }
+
+    if(size + positionToWrite >= SD_BLOCK_SIZE)
+    {
+        int firstWriteLeftover = SD_BLOCK_SIZE - positionToWrite;
+        // write current temporary buffer and maximum leftover size
+        memcpy(&timeoutBuffer[positionToWrite], buffer, firstWriteLeftover);
+        err = sdBlockDev.program(timeoutBuffer, firstWritePosition,
+                                 SD_BLOCK_SIZE);
+
+        firstWritePosition = addr + firstWriteLeftover;
+
+        int leftoverSize = size - (firstWriteLeftover);
         while(leftoverSize > SD_BLOCK_SIZE)
         {
             // writes in chunks of SD_BLOCK_SIZE bytes
-            err = sdBlockDev.program(
-                (uint8_t *)(&buffer)[SD_BLOCK_SIZE - positionToWrite],
-                firstWritePosition, SD_BLOCK_SIZE);
+            err = sdBlockDev.program((uint8_t *)(&buffer)[firstWriteLeftover],
+                                     firstWritePosition, SD_BLOCK_SIZE);
             firstWritePosition += SD_BLOCK_SIZE;
             positionToWrite -= SD_BLOCK_SIZE;
             leftoverSize -= SD_BLOCK_SIZE;
@@ -278,7 +290,7 @@ int FlashLog::writeToLog(const void *buffer, bd_addr_t addr, bd_size_t size)
 
         lastWrite = UINT64_MAX; // next write is at start of buffer
         // reset timeoutBuffer to all 0s
-        memset(timeoutBuffer, 0, SD_BLOCK_SIZE);
+        memset(timeoutBuffer, 0xFF, SD_BLOCK_SIZE);
         flashlogTimer.reset();
 
         if(leftoverSize > 0)
@@ -301,8 +313,10 @@ int FlashLog::writeToLog(const void *buffer, bd_addr_t addr, bd_size_t size)
                                  SD_BLOCK_SIZE);
 
         // reset timeoutBuffer to all 0s
-        memset(timeoutBuffer, 0, SD_BLOCK_SIZE);
+        memset(timeoutBuffer, 0xFF, SD_BLOCK_SIZE);
         flashlogTimer.reset();
+
+        lastWrite = UINT64_MAX;
     }
 
     return err;
@@ -698,6 +712,8 @@ int FlashLog::writePacket(uint8_t type, void *packet, ptimer_t pwr_ctr, ptimer_t
 */
 int FlashLog::wipeLog(bool complete)
 {
+    // buffer that only contains 0xFF to program the log with
+    static uint8_t eraseBuffer[SD_BLOCK_SIZE] = {0xFF};
     int err=0;
     // hopefully the block device size is always a clean multiple of the sector size
     MBED_ASSERT(sdBlockDev.size() % SD_BLOCK_SIZE == 0);
@@ -713,7 +729,7 @@ int FlashLog::wipeLog(bool complete)
             break;
         }
         pc.printf("(%.02f%%)\r\n", ( (double) addr / (LOG_CAPACITY))*100);
-        err = sdBlockDev.program(zeroBuffer, addr, SD_BLOCK_SIZE);
+        err = sdBlockDev.program(eraseBuffer, addr, SD_BLOCK_SIZE);
         Watchdog::get_instance().kick();
     }
     pc.printf("[FlashLog] Erase finished!\r\n");
