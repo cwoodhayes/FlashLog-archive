@@ -357,6 +357,8 @@ protected:
     // SDBlockDevice::program
     bd_addr_t firstWritePosition = 0;
 
+    bool firstWriteToLog = true;
+
 	/** Returns true if a log already exists on the chip.
 
 	 Currently, it just checks the first 90 bytes for any zero bits (erased sectors are always 0xFF).

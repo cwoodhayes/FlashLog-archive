@@ -58,8 +58,6 @@ std::pair<bd_error, FLResultCode> FlashLog::initLog() {
       pc.printf("block device erase size: 0x%" PRIX64 "\r\n",   sdBlockDev.get_erase_size());
 #endif
 
-    flashlogTimer.start();
-
 	FLResultCode err;
 
 	if (logExists(&err)) {
@@ -91,7 +89,7 @@ bool FlashLog::logExists(FLResultCode *err) {
     uint8_t buf[MAX_PACKET_LEN];
     *err = readFromLog(buf, LOG_START_ADDR, MAX_PACKET_LEN);
     for (size_t i=0; i<MAX_PACKET_LEN; i++) {
-        if (~buf[i] & 0xFF){
+        if (buf[i] != 0xFF){
             // pc.printf("i:%" PRIu32 " c:%x %x\r\n",i,buf[i], ~buf[i]);
             return true;
         }
@@ -107,27 +105,27 @@ bool FlashLog::logExists(FLResultCode *err) {
 FLResultCode FlashLog::findLastPacket() {
     FLResultCode err = FL_SUCCESS;
     bd_addr_t start=LOG_START_ADDR, end=LOG_END_ADDR, middle;
-    uint8_t buf[2*MAX_PACKET_LEN];        //needs to be 2*max for when we find the END of the last packet
-    readFromLog(buf, start, MAX_PACKET_LEN);
+    const size_t searchBlockSize = (2*MAX_PACKET_LEN + SD_BLOCK_SIZE - 1)/SD_BLOCK_SIZE * SD_BLOCK_SIZE; //needs to be 2*max for when we find the END of the last packet
+    static uint8_t buf[searchBlockSize];
+    MBED_ASSERT(end - start > 2 * searchBlockSize);
 
     //binary search until we're somewhere inside the last packet
-    while ( static_cast<size_t>(end - start) >= MAX_PACKET_LEN) {
-        bool isPacket = false;
+    bool isPacket = false;
+    while ( static_cast<size_t>(end - start) >= 2*searchBlockSize) {
         //here be packets? yarr?
         middle = start/2+end/2;    //2 divisions to avoid unsigned overflow
-        if(middle > (LOG_END_ADDR - MAX_PACKET_LEN)){
-            pc.printf("Could not find end of log! Log may be full\r\n");
-            return FL_ERROR_BOUNDS;
-        }
-        FLResultCode readError = readFromLog(buf, middle, MAX_PACKET_LEN);
+
+        MBED_ASSERT(middle % SD_BLOCK_SIZE == 0);
+        FLResultCode readError = readFromLog(buf, middle, searchBlockSize);
 
         if(readError)
 		{
         	err = readError;
 		}
+        isPacket = false;
 
-        for (size_t i=0; i<MAX_PACKET_LEN; i++) {    //TODO just use 32 bit operands where possible
-            if (~buf[i] & 0x000000FF) {    //need to bitmask because cortex 3 only supports 32-bit flip
+        for (size_t i=0; i<searchBlockSize; i++) {    //TODO just use 32 bit operands where possible
+            if (buf[i] != 0xFF) {
                 isPacket = true;
                 break;
             }
@@ -142,18 +140,23 @@ FLResultCode FlashLog::findLastPacket() {
         if (isPacket) start = middle;
         else end = middle;
     }
+
+    if(middle == (LOG_END_ADDR - searchBlockSize) && !isPacket){
+        pc.printf("Could not find end of log! Log may be full\r\n");
+        return FL_ERROR_BOUNDS;
+    }
+
     // The end of the last packet is now somewhere between `start` and `end`
 #ifdef FL_DEBUG
     pc.printf("discovered end of logfile near %016" PRIX64 ". Printing buffer contents:\r\n", start);
-    PRETTYPRINT_BYTES(buf, MAX_PACKET_LEN, start);
+    PRETTYPRINT_BYTES(buf, searchBlockSize, start);
 #endif
 
     /*    Now we have the approximate address of the last packet, but we need to know exactly
             where it ends. Since all packets end in magic3, which is 0xCCCCCCCC, this is easy--creep along until
             we haven't seen anything but FF in MAX_PACKET_LEN bytes, then use the last time we saw 0's as
             the end of the tail. */
-    bd_addr_t approx_last_packet_begin = start-MAX_PACKET_LEN;
-    approx_last_packet_begin = approx_last_packet_begin > LOG_START_ADDR ? approx_last_packet_begin : LOG_START_ADDR;
+    bd_addr_t approx_last_packet_begin = (start - LOG_START_ADDR < MAX_PACKET_LEN) ? LOG_START_ADDR : start-MAX_PACKET_LEN;
 
 	FLResultCode readError = readFromLog(buf, approx_last_packet_begin, 2*MAX_PACKET_LEN);    //fill up the buffer in one shot
 	if(readError)
@@ -228,6 +231,12 @@ FLResultCode FlashLog::findLastPacket() {
 
 int FlashLog::writeToLog(const void *buffer, bd_addr_t addr, bd_size_t size)
 {
+    if(firstWriteToLog)
+    {
+        flashlogTimer.start();
+        firstWriteToLog = false;
+    }
+
     // TODO proper error handling. This just returns *last* error, not
     // all/first/worst/??? error. Also, just returns 0 if buffer is not flushed,
     // so returning 0 does *not* mean successful write, it means the *last*
@@ -413,14 +422,10 @@ FLResultCode FlashLog::readFromLog(void *buffer, bd_addr_t addr, bd_size_t size)
 	}
 
 	// copy epilogue data into buffer
-	bd_size_t prologueLength = prologueEnd - prologueStart;
-	if(prologueLength > sizeRemaining)
-	{
-		prologueLength = sizeRemaining;
-	}
+	bd_size_t epilogueLength = epilogueEnd - epilogueStart;
 
 	memcpy(reinterpret_cast<uint8_t *>(buffer) + nextByteIndex, temporaryBuffer, sizeRemaining);
-	sizeRemaining -= prologueLength;
+	sizeRemaining -= epilogueLength;
 
 	MBED_ASSERT(sizeRemaining == 0);
 
