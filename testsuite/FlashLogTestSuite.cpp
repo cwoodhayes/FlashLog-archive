@@ -11,7 +11,7 @@
 #include "SPIFBlockDevice.h"
 
 #include "Packet.h"
-#include "fsm.h"
+#include "HamsterFSM.h"
 #include "FlashLog.h"
 
 #include "FlashLogTestSuite.h"
