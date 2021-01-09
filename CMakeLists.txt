@@ -11,6 +11,7 @@ endif()
 set(FLASHLOG_SOURCES
     src/FlashLog.cpp
     include/FlashLog.h
+    src/Packet.cpp
     include/Packet.h
     ${FLASHLOG_CONFIG_HEADER})
 
@@ -22,7 +23,7 @@ add_library(flashlog STATIC ${FLASHLOG_SOURCES})
 target_link_libraries(flashlog mbed-os)
 target_include_directories(flashlog PUBLIC include)
 
-# disable a warning that isn't relevant here
+# disable warnings that aren't relevant here
 target_compile_options(flashlog PRIVATE -Wno-type-limits)
 
 # include directory where the config header is
@@ -30,4 +31,5 @@ get_filename_component(CONFIG_HEADER_DIR ${FLASHLOG_CONFIG_HEADER} DIRECTORY)
 target_include_directories(flashlog PUBLIC ${CONFIG_HEADER_DIR})
 
 add_mbed_executable(test_flash ${TEST_FLASH_SOURCES})
-target_link_libraries(test_flash flashlog)
+target_link_libraries(test_flash flashlog ${FLASHLOG_TEST_HARNESS_LIBRARIES})
+target_compile_options(test_flash PRIVATE -Wno-unknown-pragmas)

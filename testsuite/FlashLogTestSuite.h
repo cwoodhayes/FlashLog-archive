@@ -56,7 +56,6 @@ class FlashLogHarness : public FlashLog
 		 * @return     error
 		 */
 		int test_chip_iterate_packets();
-		int test_chip_iterate_gps_text_packets();
 
 		/**
 		 * @brief      Manually write a bad packet to the end of the flash using SPIFBlockDevice

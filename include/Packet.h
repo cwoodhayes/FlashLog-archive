@@ -9,6 +9,7 @@
 
 #include <mbed.h>
 #include <inttypes.h>
+#include <Stream.h>
 
 #include <FlashLogConfig.h>
 
@@ -18,8 +19,8 @@
  * 1. Add a new type ID in the definition list below with the next consecutive value.
  * 2. Update LOG_END_TYPEID to be one higher than the new largest type ID.
  * 3. Add a new struct for your packet below.  Make sure to make the last member "struct packet_tail tail".
- * 4. Add a new PRINT_LOG_<name> macro for your packet below.
- * 5. Add a new case for your packet in the switch statement in FlashLog::getPacketLen()
+ * 4. Add a new case for your packet in printPacket() in Packet.cpp
+ * 5. Add a new case for your packet in the switch statement in getPacketLen() in Packet.cpp
  * 6. Add a new case which calls your print macro in test_chip_iterate_packets() in the FlashLog test suite.
  */
 
@@ -74,17 +75,6 @@ struct packet_tail {
 };
 
 /* DEBUG MACROS */
-//neatly prints a packet's packet_tail struct with its values in order
-#define PRINT_TAIL(PACKET_TAIL) \
-        pc.printf("tail.magic = %04" PRIX16 "%02" PRIX8 "; \r\ntail.state = %s;   \
-           \r\ntail.typeID = %" PRIX8 "; \r\ntail.pwr_ctr = %" PRIu64 ";    \
-           \r\ntail.flight_ctr = %" PRIu64 "; \r\ntail.checksum = %08" PRIX32 "   \
-           \r\ntail.magic3 = %08" PRIX32 "\r\n", \
-            (PACKET_TAIL).magic1, (PACKET_TAIL).magic2, \
-            FL_GET_STATE_NAME((PACKET_TAIL).state), (PACKET_TAIL).typeID, \
-            (PACKET_TAIL).pwr_ctr, (PACKET_TAIL).flight_ctr, \
-            (PACKET_TAIL).checksum, (PACKET_TAIL).magic3)
-
 //prints all bytes in a packet given its type and a pointer to it/its bytes
 #define PRINT_PACKET_BYTES(TYPE, PACKET_BUF)	\
     		pc.printf("[P:]"); \
@@ -110,48 +100,6 @@ struct packet_tail {
         } \
         pc.printf("\r\n")
 
-#define PRINT_LOG_TEXT(LPTXT) \
-        pc.printf("msg=%s\r\n", \
-        	LPTXT->msg); \
-        PRINT_TAIL(LPTXT->tail)
-
-#define PRINT_LOG_TEMP(LPTMP) \
-        pc.printf("temp=%f\r\n", \
-        	LPTMP->temp); \
-        PRINT_TAIL(LPTMP->tail) 
-
-#define PRINT_LOG_ACCEL(LPA) \
-        pc.printf("ax=%" PRIi16 "\tay=%" PRIi16 "\taz=%" PRIi16 "\r\n", \
-        	LPA->ax, LPA->ay, LPA->az); \
-        PRINT_TAIL(LPA->tail)
-
-#define PRINT_LOG_GPS(LPG) \
-        pc.printf("fixQual=%" PRIu8 "\tnumSats=%d\tlat=%f\tlong=%f\talt=%f" \
-                  "\tvelNED=[%.02f, %.02f, %.02f]"\
-        		  "\ttime=%" PRIu8 "/%" PRIu8 "/%" PRIu8 " %" PRIu8 ":%" PRIu8 ":%" PRIu8 "\r\n", \
-        	static_cast<uint8_t>(LPG->fixQuality), LPG->numSatellites, LPG->latitude, LPG->longitude, LPG->height, \
-        	LPG->northVel/100.0, LPG->eastVel/100.0, LPG->downVel/100.0, \
-        	LPG->month, LPG->day, LPG->year, LPG->hour, LPG->minute, LPG->second); \
-        PRINT_TAIL(LPG->tail)
-
-#define PRINT_LOG_BNO(LPI) \
-        pc.printf("qx=%f\tqy=%f\tqz=%f\tqw=%f\tax=%f\tay=%f\taz=%f\tcalib=%hhu\r\n", \
-        	LPI->quatX, LPI->quatY, LPI->quatZ, LPI->quatW, LPI->ax, LPI->ay, LPI->az, LPI->calib); \
-        PRINT_TAIL(LPI->tail)
-        
-#define PRINT_LOG_BARO(LPB) \
-        pc.printf("altitude=%.02f\tpressure=%" PRIu32 "\ttemp=%.01f\r\n", \
-        	LPB->altitude, LPB->pressure, LPB->temperature); \
-        PRINT_TAIL(LPB->tail)
-
-#define PRINT_LOG_POWER(power) \
-        pc.printf("battVoltage=%.02f\tbattCurrent=%.03f\treg5VCurrent=%.02f\tchargePercent=%" PRIu8 "\r\n", power->battVoltage, power->battCurrent, power->reg5VCurrent, power->chargePercent);\
-	PRINT_TAIL(power->tail)
-
-#define PRINT_LOG_ADIS(adis) \
-        pc.printf("gyroX=%.02f\tgyroY=%.02f\tgyroZ=%.02f\r\naccelX=%.02f\taccelY=%.02f\taccelZ=%.02f\r\n",\
-		 adis->gyroX, adis->gyroY, adis->gyroZ, adis->accelX, adis->accelY, adis->accelZ);\
-	PRINT_TAIL(adis->tail)
 
 /* 	Logs text-based info messages.
 		Data Size: 64 bytes
@@ -289,5 +237,24 @@ struct log_packet_empty {
 struct log_binary_dump_frame {
 	char bytes[1024*3]; 
 };
+
+/**
+ * @brief      Gets the length of a given packet type
+ *
+ * @param[in]  type  The packet type
+ *
+ * @return     Length of the packet in bytes, or 0 if this type is not recognized as valid.
+ */
+size_t getPacketLen(uint8_t type);
+
+/**
+ * Print a packet tail to the given stream.
+ */
+void printPacketTail(struct packet_tail const * tail, Stream & pc);
+
+/**
+ * Print a packet's data and tail to the given stream based on its type.
+ */
+void printPacket(void const * packetBytes, uint8_t packetType, Stream & pc);
 
 #endif

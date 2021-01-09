@@ -735,7 +735,7 @@ int FlashLog::wipeLog(bool complete)
     int erase_size = SD_BLOCK_SIZE;
     size_t lastPacketAddress = nextPacketAddr;
     // now erase sectors in order
-    pc.printf("Erasing flash log (0x%016x - 0x%016" PRIx64 ").\r\n", LOG_START_ADDR, complete?LOG_END_ADDR:lastPacketAddress);
+    pc.printf("Erasing flash log (0x%016" PRIx64 " - 0x%016" PRIx64 ").\r\n", LOG_START_ADDR, complete?LOG_END_ADDR:lastPacketAddress);
 
     float prevProgress = 0;
 
@@ -797,7 +797,7 @@ FLResultCode FlashLog::binaryDumpIterator(struct log_binary_dump_frame *frame, b
 
 FLResultCode FlashLog::binaryDumpReverseIterator(struct log_binary_dump_frame *frame, bool begin)
 {
-    static int64_t nextReadAddrReverse = 0;
+    static bd_addr_t nextReadAddrReverse = 0;
 
     int64_t frame_len = sizeof(log_binary_dump_frame);
     //begin a new iteration?
@@ -874,7 +874,7 @@ bd_addr_t FlashLog::findPacketTailBefore(bd_addr_t curPacketTailAddr, struct pac
 
 #ifdef FL_DEBUG
         pc.printf("[findPacketTailBefore] Provided Packet is Valid\r\n");
-        PRINT_TAIL((*curPacketTail));
+        printPacketTail(curPacketTail, pc);
 #endif
 
         if(tailDescribesValidPacket(prevPacketTail, *prevPacketTailAddr)){
@@ -892,8 +892,8 @@ bd_addr_t FlashLog::findPacketTailBefore(bd_addr_t curPacketTailAddr, struct pac
         memcpy(prevPacketTail, curPacketTail, sizeof(struct packet_tail));
 #ifdef FL_DEBUG
         pc.printf("[findPacketTailBefore] Provided Packet is Invalid. Copying curPacketTail to prevPacketTail\r\n");
-        PRINT_TAIL((*curPacketTail));
-        PRINT_TAIL((*prevPacketTail));
+        printPacketTail(curPacketTail, pc);
+		printPacketTail(prevPacketTail, pc);
 #endif
 
     }
@@ -943,7 +943,7 @@ bd_addr_t FlashLog::findPacketTailBefore(bd_addr_t curPacketTailAddr, struct pac
             // got one!
 #ifdef FL_DEBUG
             pc.printf("Found a valid tail at %08" PRIX64 ".\r\n", tailAddress);
-            PRINT_TAIL((*prevPacketTail));
+            printPacketTail(prevPacketTail, pc);
 #endif
             *prevPacketTailAddr = tailAddress;
             return FL_SUCCESS;
@@ -980,7 +980,7 @@ FLResultCode FlashLog::packetIterator(uint8_t *type, void *buf, bool begin) {
     readFromLog(buf, nextPacketToRead, MAX_PACKET_LEN);
 #ifdef FL_DEBUG
     PRETTYPRINT_BYTES(buf, MAX_PACKET_LEN, nextPacketToRead);
-    #endif //FL_DEBUG
+#endif //FL_DEBUG
 
     //Check if all 0xFF's
     char *bufc = (char *)buf;
@@ -1181,28 +1181,6 @@ void crc32(const void *data, size_t n_bytes, uint32_t* crc) {
       table[i] = crc32_for_byte(i);
   for(size_t i = 0; i < n_bytes; ++i)
     *crc = table[(uint8_t)*crc ^ ((uint8_t*)data)[i]] ^ *crc >> 8;
-}
-
-/* Returns the length of a given packet type. Makes the code more readable and
- * modular.
- *
- * @param[in]  type  The packet type
- *
- * @return     The packet length.
- */
-size_t getPacketLen(uint8_t type) {
-	switch (type) {
-		case LOG_TEXT:         return sizeof(struct log_packet_text);
-		case LOG_TEMP:         return sizeof(struct log_packet_temp);
-		case LOG_ACCEL:     return sizeof(struct log_packet_accel);
-		case LOG_BNO:         return sizeof(struct log_packet_bno);
-		case LOG_GPS:         return sizeof(struct log_packet_gps);
-		case LOG_BARO:         return sizeof(struct log_packet_baro);
-		case LOG_POWER:        return sizeof(struct log_packet_power);
-		case LOG_ADIS:        return sizeof(struct log_packet_adis);
-		default:
-			return 0;
-	}
 }
 
 /* takes in a buffer BUF of size LEN and finds the start of the first tail, if

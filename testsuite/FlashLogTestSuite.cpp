@@ -1,3 +1,5 @@
+#pragma clang diagnostic push
+#pragma ide diagnostic ignored "readability-magic-numbers"
 /*  USC RPL HAMSTER v2.3 Flash chip and FlashLog tests.
     Lead: Conor Hayes
     Contributors: 
@@ -87,7 +89,7 @@ int FlashLogHarness::test_chip_write_packets()
     }
 
     //write a bunch of packets to about a quarter of the log
-    pc.printf("Starting to write packets at %08x.\r\n", LOG_START_ADDR);
+    pc.printf("Starting to write packets at %08" PRIu64 ".\r\n", LOG_START_ADDR);
     int i_max = (LOG_CAPACITY) / (2*AVG_PACKET_SIZE);
     for (int i=0; i<i_max; i++)
     {
@@ -178,72 +180,8 @@ int FlashLogHarness::test_chip_iterate_packets()
     		PRINT_PACKET_BYTES(type, buf);
     		printf("\r\nFormatted data is:\r\n");
             #endif  //PRINT_PACKETS
-    		switch(type){
-    		case LOG_TEXT:
-    			{
-    			struct log_packet_text *lptxt = (struct log_packet_text *)buf;
-    			#ifdef PRINT_PACKETS
-                PRINT_LOG_TEXT(lptxt);
-    			#endif //PRINT_PACKETS
-                }
-    			break;
-    		case LOG_TEMP:
-    			{
-    			struct log_packet_temp *lptmp = (struct log_packet_temp *)buf;
-    			#ifdef PRINT_PACKETS
-                PRINT_LOG_TEMP(lptmp);
-    			#endif //PRINT_PACKETS
-                }
-    			break;
-    		case LOG_ACCEL:
-    			{
-    			struct log_packet_accel *lpa = (struct log_packet_accel *)buf;
-    			#ifdef PRINT_PACKETS
-                PRINT_LOG_ACCEL(lpa);
-    			#endif //PRINT_PACKETS
-                }
-    			break;
-    		case LOG_BNO:
-    			{
-    			struct log_packet_bno *lpi = (struct log_packet_bno *)buf;
-    			#ifdef PRINT_PACKETS
-                PRINT_LOG_BNO(lpi);
-    			#endif //PRINT_PACKETS
-                }
-    			break;
-    		case LOG_GPS:
-    			{
-    			struct log_packet_gps *lpg = (struct log_packet_gps *)buf;
-    			#ifdef PRINT_PACKETS
-                PRINT_LOG_GPS(lpg);
-    			#endif //PRINT_PACKETS
-                }
-    			break;
-    		case LOG_BARO:
-    			{
-    			struct log_packet_baro *lpb = (struct log_packet_baro *)buf;
-    			#ifdef PRINT_PACKETS
-                PRINT_LOG_BARO(lpb);
-    			#endif //PRINT_PACKETS
-                }
-    			break;
-    		case LOG_POWER:
-				{
-				struct log_packet_power *lpp = (struct log_packet_power *)buf;
-#ifdef PRINT_PACKETS
-				PRINT_LOG_POWER(lpp);
-#endif //PRINT_PACKETS
-				}
-            case LOG_ADIS:
-                {
-                    struct log_packet_adis *lpa = (struct log_packet_adis *)buf;
-#ifdef PRINT_PACKETS
-                    PRINT_LOG_ADIS(lpa);
-#endif //PRINT_PACKETS
-                }
-    		default:
-    			break;
-    		}
+
+    		printPacket(buf, type, pc);
     		break;
     	case FL_ERROR_CHECKSUM:
     		printf("Error: Invalid checksum or fake magic constant.\r\n");
@@ -279,93 +217,6 @@ int FlashLogHarness::test_chip_iterate_packets()
     return 0;
 }
 
-int FlashLogHarness::test_chip_iterate_gps_text_packets()
-{
-
-    char buf[MAX_PACKET_LEN];
-    uint8_t type;
-    pc.printf("Iterating through GPS and TEXT packets in log:\r\n");
-    int valid;
-    #ifdef MAX_PACKETS_TO_ITERATE
-    int iteration_ctr=0;
-    #endif
-    // As long as our read wasn't out of bounds or from empty/unwritten memory, keep reading (even if there's other types of errors)
-    for (valid = packetIterator(&type, buf, true); (valid != FL_ERROR_BOUNDS) && (valid != FL_ERROR_EMPTY); valid = packetIterator(&type, buf, false))
-    {
-        #ifdef MAX_PACKETS_TO_ITERATE
-        if (++iteration_ctr == MAX_PACKETS_TO_ITERATE)
-        {
-            pc.printf("Ending CHIP_ITERATE_PACKETS -- printed %d packets\r\n", i);
-            return 0;
-        }
-        #endif  //MAX_PACKETS_TO_ITERATE
-        switch(valid)
-        {
-        case FL_SUCCESS:
-            #ifdef PRINT_PACKETS
-            pc.printf("Packet is valid, raw bytes are:\r\n");
-            PRINT_PACKET_BYTES(type, buf);
-            pc.printf("\r\nFormatted data is:\r\n");
-            #endif  //PRINT_PACKETS
-            switch(type){
-            case LOG_TEXT:
-                {
-                struct log_packet_text *lptxt = (struct log_packet_text *)buf;
-                #ifdef PRINT_PACKETS
-                PRINT_LOG_TEXT(lptxt);
-                #endif //PRINT_PACKETS
-                }
-                break;
-            case LOG_GPS:
-                {
-                struct log_packet_gps *lpg = (struct log_packet_gps *)buf;
-                #ifdef PRINT_PACKETS
-                PRINT_LOG_GPS(lpg);
-                #endif //PRINT_PACKETS
-                }
-                break;
-            default:
-                break;
-            }
-            break;
-        case FL_ERROR_CHECKSUM:
-            pc.printf("Error: Invalid checksum or fake magic constant.\r\n");
-            break;
-        case FL_ERROR_TYPE:
-            pc.printf("Error: Invalid packet type.\r\n");
-            break;
-        case FL_ERROR_NOTAIL:
-            pc.printf("Error: No tail/magic constant found in this read.\r\n");
-            break;
-        default:
-            pc.printf("Unrecognized error code: %d\r\n", valid);
-            break;
-        }
-        if (valid != FL_SUCCESS)
-        {
-            pc.printf("Buffer contents which caused error:");
-            PRETTYPRINT_BYTES(buf, MAX_PACKET_LEN, nextPacketToRead);
-        }
-    }
-    switch(valid){
-    case FL_ERROR_BOUNDS:
-        pc.printf("Fatal Error: Out of bounds.\r\n\r\n");
-        break;
-    case FL_ERROR_EMPTY:
-        pc.printf("Fatal Error: Completely empty region of memory.\r\n\r\n");
-        break;
-    default:
-        pc.printf("Fatal Error: Unrecognized error code: %d\r\n\r\n", valid);
-        break;
-    }
-    pc.printf("Test complete.\r\n");
-    return 0;
-}
-
-
-
-
-
 
 /*  Manually write a bad packet to the end of the flash.
     After running this, confirm that the log can recover by running brownout_recovery 
@@ -380,10 +231,10 @@ int FlashLogHarness::test_write_bad_packet()
         pc.printf("restoring pre-existing log\r\n");
         uint64_t restoredPowerTimer;
         uint64_t restoredFlightTimer;
-        FLResultCode err = restoreFSMState(&fsmState, &restoredPowerTimer, &restoredFlightTimer);
-        if (err != FL_SUCCESS)
+        FLResultCode restoreErr = restoreFSMState(&fsmState, &restoredPowerTimer, &restoredFlightTimer);
+        if (restoreErr != FL_SUCCESS)
         {
-            pc.printf("restoreFSMState exited with error %d\r\n", err);
+            pc.printf("restoreFSMState exited with error %d\r\n", restoreErr);
         }
         else
 		{
@@ -571,7 +422,7 @@ int FlashLogHarness::write_pattern(uint32_t pattern, bd_addr_t start_addr, bd_si
         int err = sdBlockDev.program(buf, i, SD_BLOCK_SIZE);
         if (err)
         {
-            pc.printf("Write error at 0x%08" PRIX32 ".\r\n", i);
+            pc.printf("Write error at 0x%08" PRIX64 ".\r\n", i);
             return -1;
         }
         //update a status bar every now and again
@@ -596,7 +447,7 @@ int FlashLogHarness::check_pattern(uint32_t pattern, bd_addr_t start_addr, bd_si
         int err = sdBlockDev.read(buf, i, SD_BLOCK_SIZE);
         if (err)
         {
-            pc.printf("Read error at 0x%08" PRIX32 " .\r\n", i);
+            pc.printf("Read error at 0x%08" PRIX64 " .\r\n", i);
             return -1;
         }
         // check 4 bytes at a time
@@ -620,7 +471,7 @@ int FlashLogHarness::check_pattern(uint32_t pattern, bd_addr_t start_addr, bd_si
 int FlashLogHarness::test_writeAtLargeAddress(){
 
     pc.printf("Chip initialized. \r\n");
-    pc.printf("MAX SIZE: %x\r\n", LOG_END_ADDR);
+    pc.printf("MAX SIZE: %" PRIx64 "\r\n", LOG_END_ADDR);
     uint32_t buf = 0xdeadbeef;
     sdBlockDev.program(&buf, 0x03FFFFF0, 4);
     uint32_t frame;
@@ -664,7 +515,7 @@ int FlashLogHarness::test_avoid_partial_packet_tail()
     {
         pc.printf("Log empty.\r\n");
     }
-    pc.printf("Writing bad data starting at %" PRIu32 "\r\n", nextPacketAddr);
+    pc.printf("Writing bad data starting at 0x%" PRIx64 "\r\n", nextPacketAddr);
     sdBlockDev.program(badDataString, nextPacketAddr, sizeof(badDataString) - 1);
     pc.printf("Bad packet written. Please power cycle and run brownout_recovery test\r\n");
     return 0;
@@ -702,7 +553,6 @@ int flash_test_main()
         pcStream.printf("11. Wipe Log\r\n");
         pcStream.printf("12. Dump Hex Data\r\n");
         pcStream.printf("13. Dump Binary Data\r\n");
-        pcStream.printf("14. GPS Text Packet iterate\r\n");
         pcStream.printf("15. Test checksum\r\n");
         pcStream.printf("16. Check Erase\r\n");
         pcStream.printf("17. Write at Large Address\r\n");
@@ -728,7 +578,6 @@ int flash_test_main()
             case 11:        harness.test_wipe_log();                      break;
             case 12:        harness.test_dump_hex();                      break;
             case 13:        harness.test_dump_binary(pcStream);                 break;
-            case 14:        harness.test_chip_iterate_gps_text_packets(); break;
             case 15:        harness.test_checksum();                      break;
             case 16:        harness.test_check_erase();                   break;
             case 17:        harness.test_writeAtLargeAddress();           break;
@@ -742,3 +591,5 @@ int flash_test_main()
     }
 }
 
+
+#pragma clang diagnostic pop

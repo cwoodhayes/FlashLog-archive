@@ -20,11 +20,6 @@
 #include <BlockDevice.h>
 #include <Stream.h>
 
-#define FLASH_START_ADDR 		0x000000000
-#define FLASH_END_ADDR 			0x200000000 //for an 8GB microSD Card
-
-#define FLASH_SECTOR_SIZE 	0x40000
-
 //it's nice to test with a shorter log so the tests don't take ages.
 #define LOG_START_ADDR 			FLASH_START_ADDR
 
