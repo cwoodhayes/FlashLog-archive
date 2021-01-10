@@ -232,10 +232,10 @@ struct log_packet_empty {
 };
 
 /**
- * @brief      256-byte frame for dumping raw binary data from the log.
+ * @brief      Frame for dumping raw binary data from the log.
  */
 struct log_binary_dump_frame {
-	char bytes[1024*3]; 
+	char bytes[3072]; // This size required for Heatshrink compression in HAMSTER
 };
 
 /**

@@ -22,12 +22,15 @@ sdBlockDev(_blockDev)
 {
     logInitialized = false;
 
-    nextPacketAddr = LOG_START_ADDR;
-    lastTailAddr = LOG_START_ADDR;
+    // currently there's no situation where the start address would be nonzero... but we still have a variable for it
+    logStart = 0;
+
+    nextPacketAddr = logStart;
+    lastTailAddr = logStart;
     packetsWritten = 0;
     lastPacketType = LOG_INVALID;
 
-    nextPacketToRead = LOG_START_ADDR;
+    nextPacketToRead = logStart;
 }
 
 /* Destructor */
@@ -58,6 +61,18 @@ std::pair<bd_error, FLResultCode> FlashLog::initLog() {
       pc.printf("block device erase size: 0x%" PRIX64 "\r\n",   sdBlockDev.get_erase_size());
 #endif
 
+	// detect log size from block device
+	logEnd = sdBlockDev.size() / FL_SIZE_DIVISOR;
+
+	MBED_ASSERT(sdBlockDev.get_program_size() == sdBlockDev.get_read_size());
+	blockSize = sdBlockDev.get_program_size();
+	if(blockSize > FL_MAX_BLOCK_SIZE)
+	{
+		pc.printf("Error: FlashLog was not compiled with support for memory with block size %" PRIu64 ", please increase FL_MAX_BLOCK_SIZE\r\n", blockSize);
+	}
+
+	eraseBlockSize = sdBlockDev.get_erase_size();
+
 	FLResultCode err;
 
 	if (logExists(&err)) {
@@ -77,7 +92,11 @@ std::pair<bd_error, FLResultCode> FlashLog::initLog() {
         err = FL_SUCCESS;
     }
     this->logInitialized = true;
-    pc.printf("[FlashLog]: Log initialized from 0x%016" PRIX64 "-0x%016" PRIX64 ".\r\n",
+
+    // remove any data that may have been in the write cache
+	clearWriteCache();
+
+	pc.printf("[FlashLog]: Log initialized from 0x%016" PRIX64 "-0x%016" PRIX64 ".\r\n",
                         getLogStartAddress(), getLogStartAddress()+getLogCapacity());
     pc.printf("[FlashLog]: Log is currently %.1f%% filled (%" PRIu64 " bytes).\r\n",
                         (float) getLogSize() * 100.0 / (float) getLogCapacity(), getLogSize());
@@ -87,7 +106,7 @@ std::pair<bd_error, FLResultCode> FlashLog::initLog() {
 
 bool FlashLog::logExists(FLResultCode *err) {
     uint8_t buf[MAX_PACKET_LEN];
-    *err = readFromLog(buf, LOG_START_ADDR, MAX_PACKET_LEN);
+    *err = readFromLog(buf, logStart, MAX_PACKET_LEN);
     for (size_t i=0; i<MAX_PACKET_LEN; i++) {
         if (buf[i] != 0xFF){
             // pc.printf("i:%" PRIu32 " c:%x %x\r\n",i,buf[i], ~buf[i]);
@@ -104,13 +123,14 @@ bool FlashLog::logExists(FLResultCode *err) {
 */
 FLResultCode FlashLog::findLastPacket() {
     FLResultCode err = FL_SUCCESS;
-    bd_addr_t start=LOG_START_ADDR, end=LOG_END_ADDR, middle;
+    bd_addr_t start=logStart, end=logEnd, middle;
 
     // If the block size is > 2*max, then we need to search based on that in order to handle blanks of up to SD_BLOCK_SIZE - 1
-    // Otherwise, needs to be 2*max for when we find the END of the last packet.
-    const size_t searchBlockSize = (2*MAX_PACKET_LEN + SD_BLOCK_SIZE - 1)/SD_BLOCK_SIZE * SD_BLOCK_SIZE;
+    // Otherwise, needs to be 2*max rounded up to the nearest block for when we find the END of the last packet.
+    const size_t maxSearchBlockSize = (2*MAX_PACKET_LEN + FL_MAX_BLOCK_SIZE - 1)/FL_MAX_BLOCK_SIZE * FL_MAX_BLOCK_SIZE;
+	const size_t searchBlockSize = (2*MAX_PACKET_LEN + blockSize - 1)/blockSize * blockSize;
 
-    static uint8_t buf[searchBlockSize];
+    static uint8_t buf[maxSearchBlockSize];
     MBED_ASSERT(end - start >= 2 * searchBlockSize); // make sure that the loop is actually entered
 
     //binary search until we're somewhere inside the last packet
@@ -147,7 +167,7 @@ FLResultCode FlashLog::findLastPacket() {
         else end = middle;
     }
 
-    if(middle == (LOG_END_ADDR - searchBlockSize) && !isPacket){
+    if(middle == (logEnd - searchBlockSize) && !isPacket){
         pc.printf("Could not find end of log! Log may be full\r\n");
         return FL_ERROR_BOUNDS;
     }
@@ -163,7 +183,7 @@ FLResultCode FlashLog::findLastPacket() {
             where it ends. Since all packets end in magic3, which is 0xCCCCCCCC, this is easy--creep along until
             we haven't seen anything but FF in MAX_PACKET_LEN bytes, then use the last time we saw 0's as
             the end of the tail. */
-    bd_addr_t approx_last_packet_begin = (start - LOG_START_ADDR < MAX_PACKET_LEN) ? LOG_START_ADDR : start-MAX_PACKET_LEN;
+    bd_addr_t approx_last_packet_begin = (start - logStart < MAX_PACKET_LEN) ? logStart : start-MAX_PACKET_LEN;
 
 	FLResultCode readError = readFromLog(buf, approx_last_packet_begin, 2*MAX_PACKET_LEN);    //fill up the buffer in one shot
 	if(readError)
@@ -239,6 +259,12 @@ FLResultCode FlashLog::findLastPacket() {
 
 int FlashLog::writeToLog(const void *buffer, bd_addr_t addr, bd_size_t size)
 {
+	if(blockSize == 1)
+	{
+		// byte addressable = easy-peasy
+		return sdBlockDev.program(buffer, addr, size);
+	}
+
     if(firstWriteToLog)
     {
         flashlogTimer.start();
@@ -250,88 +276,87 @@ int FlashLog::writeToLog(const void *buffer, bd_addr_t addr, bd_size_t size)
     // so returning 0 does *not* mean successful write, it means the *last*
     // write was successful or there was not a write
 
-    int positionToWrite = 0;
-    if(addr > lastWrite)
-    {
-        // appending to buffer
-        positionToWrite = addr - lastWrite;
-    }
+    bd_size_t writeStartOffset;
+    if(writeCacheValid)
+	{
+		// appending to buffer
+		writeStartOffset = addr - lastCacheWriteAddr;
+	}
     else
-    {
-        // this is first write to buffer
-        firstWritePosition = addr;
-    }
+	{
+		writeStartOffset = 0;
+
+		// this is first write to buffer
+		cacheBlockAddress = addr;
+	}
 
     int err = 0;
 
-    lastWrite = addr; // start of next "previous" write
+	lastCacheWriteAddr = addr; // start of next "previous" write
 
-    if(positionToWrite >= SD_BLOCK_SIZE)
+    if(writeStartOffset >= blockSize)
     {
         // if the next write is after the end of the block, flush current block,
         // set firstWritePosition, and follow logic as expected
+        err = sdBlockDev.program(writeCache, cacheBlockAddress, blockSize);
 
-        err = sdBlockDev.program(timeoutBuffer, firstWritePosition,
-                                 SD_BLOCK_SIZE);
-
-        memset(timeoutBuffer, 0xFF, SD_BLOCK_SIZE);
+        clearWriteCache();
         flashlogTimer.reset();
 
-        firstWritePosition = addr;
-        lastWrite = firstWritePosition;
-        positionToWrite = 0;
+		cacheBlockAddress = addr;
+		lastCacheWriteAddr = cacheBlockAddress;
+		writeStartOffset = 0;
+		writeCacheValid = true;
     }
 
-    if(size + positionToWrite >= SD_BLOCK_SIZE)
+    if(size + writeStartOffset >= blockSize)
     {
-        int firstWriteLeftover = SD_BLOCK_SIZE - positionToWrite;
+        bd_size_t firstWriteLeftover = blockSize - writeStartOffset;
         // write current temporary buffer and maximum leftover size
-        memcpy(&timeoutBuffer[positionToWrite], buffer, firstWriteLeftover);
-        err = sdBlockDev.program(timeoutBuffer, firstWritePosition,
-                                 SD_BLOCK_SIZE);
+        memcpy(&writeCache[writeStartOffset], buffer, firstWriteLeftover);
+        err = sdBlockDev.program(writeCache, cacheBlockAddress, blockSize);
 
-        firstWritePosition = addr + firstWriteLeftover;
+		cacheBlockAddress = addr + firstWriteLeftover;
 
-        int leftoverSize = size - (firstWriteLeftover);
-        while(leftoverSize > SD_BLOCK_SIZE)
+        bd_size_t leftoverSize = size - (firstWriteLeftover);
+        while(leftoverSize > blockSize)
         {
             // writes in chunks of SD_BLOCK_SIZE bytes
             err = sdBlockDev.program((uint8_t *)(&buffer)[firstWriteLeftover],
-                                     firstWritePosition, SD_BLOCK_SIZE);
-            firstWritePosition += SD_BLOCK_SIZE;
-            positionToWrite -= SD_BLOCK_SIZE;
-            leftoverSize -= SD_BLOCK_SIZE;
+									 cacheBlockAddress, blockSize);
+			cacheBlockAddress += blockSize;
+			writeStartOffset -= blockSize;
+            leftoverSize -= blockSize;
         }
 
-        lastWrite = UINT64_MAX; // next write is at start of buffer
-        // reset timeoutBuffer to all FFs
-        memset(timeoutBuffer, 0xFF, SD_BLOCK_SIZE);
+		lastCacheWriteAddr = UINT64_MAX; // next write is at start of buffer
         flashlogTimer.reset();
+
+        clearWriteCache();
 
         if(leftoverSize > 0)
         {
-            // start new timeoutBuffer
-            firstWritePosition = addr + size - leftoverSize;
-            lastWrite = firstWritePosition;
-            memcpy(&timeoutBuffer[0], (uint8_t *)(&buffer)[size - leftoverSize],
-                   leftoverSize);
+            // start new writeCache
+            cacheBlockAddress = addr + size - leftoverSize;
+			lastCacheWriteAddr = cacheBlockAddress;
+            memcpy(&writeCache[0], (uint8_t *)(&buffer)[size - leftoverSize],
+				   leftoverSize);
+            writeCacheValid = true;
         }
     }
     else
     {
-        memcpy(&timeoutBuffer[positionToWrite], buffer, size);
+        memcpy(&writeCache[writeStartOffset], buffer, size);
     }
 
     if(flashlogTimer.elapsed_time() > 100ms)
     {
-        err = sdBlockDev.program(timeoutBuffer, firstWritePosition,
-                                 SD_BLOCK_SIZE);
+    	// Flush write cache to chip
+        err = sdBlockDev.program(writeCache, cacheBlockAddress, blockSize);
 
-        // reset timeoutBuffer to all 0s
-        memset(timeoutBuffer, 0xFF, SD_BLOCK_SIZE);
         flashlogTimer.reset();
 
-        lastWrite = UINT64_MAX;
+		clearWriteCache();
     }
 
     return err;
@@ -339,7 +364,7 @@ int FlashLog::writeToLog(const void *buffer, bd_addr_t addr, bd_size_t size)
 
 FLResultCode FlashLog::readFromLog(void *buffer, bd_addr_t addr, bd_size_t size)
 {
-    static uint8_t temporaryBuffer[SD_BLOCK_SIZE] = {0};
+    static uint8_t temporaryBuffer[FL_MAX_BLOCK_SIZE] = {0};
     int err = 0;
     bd_size_t sizeRemaining = size;
     size_t nextByteIndex = 0; // next index to write to in the buffer
@@ -356,7 +381,7 @@ FLResultCode FlashLog::readFromLog(void *buffer, bd_addr_t addr, bd_size_t size)
 	else
 	{
 		// read block containing prologue
-		err = sdBlockDev.read(temporaryBuffer, roundDownToNearestBlock(addr), SD_BLOCK_SIZE);
+		err = sdBlockDev.read(temporaryBuffer, roundDownToNearestBlock(addr), blockSize);
 
 		if(err != BD_ERROR_OK)
 		{
@@ -365,7 +390,7 @@ FLResultCode FlashLog::readFromLog(void *buffer, bd_addr_t addr, bd_size_t size)
 
 		// copy prologue data into buffer
 		bd_size_t offsetIntoPrologueBlock = prologueStart - roundDownToNearestBlock(addr);
-		MBED_ASSERT(offsetIntoPrologueBlock < SD_BLOCK_SIZE);
+		MBED_ASSERT(offsetIntoPrologueBlock < blockSize);
 
 		bd_size_t prologueLength = prologueEnd - prologueStart;
 		if(prologueLength > sizeRemaining)
@@ -387,7 +412,7 @@ FLResultCode FlashLog::readFromLog(void *buffer, bd_addr_t addr, bd_size_t size)
 	const bd_addr_t bodyStart = prologueEnd;
 	bd_addr_t bodyEnd;
 
-	if(sizeRemaining >= SD_BLOCK_SIZE)
+	if(sizeRemaining >= blockSize)
 	{
 		// one or more full blocks can now be read
 		bodyEnd = roundDownToNearestBlock(readEnd);
@@ -422,7 +447,7 @@ FLResultCode FlashLog::readFromLog(void *buffer, bd_addr_t addr, bd_size_t size)
 	MBED_ASSERT(epilogueStart != epilogueEnd);
 
 	// read block containing epilogue
-	err = sdBlockDev.read(temporaryBuffer, epilogueStart, SD_BLOCK_SIZE);
+	err = sdBlockDev.read(temporaryBuffer, epilogueStart, blockSize);
 
 	if(err != BD_ERROR_OK)
 	{
@@ -439,14 +464,6 @@ FLResultCode FlashLog::readFromLog(void *buffer, bd_addr_t addr, bd_size_t size)
 
 	return FL_SUCCESS;
 }
-
-/* Restores the power timer, the flight timer, and the Hamster state to their last
- recorded values.
-
- NOTE: initLog must have previously been called.
-
- @return     { description_of_the_return_value }
-*/
 
 bool FlashLog::tailDescribesValidPacket(struct packet_tail * checkingTail, bd_addr_t tailAddr){
         // first check if we have the correct magic.
@@ -486,7 +503,7 @@ bool FlashLog::tailDescribesValidPacket(struct packet_tail * checkingTail, bd_ad
         // avoid the possibility of trying to access a negative address
         bd_addr_t packetStartAddr = 0;
         size_t packetLength = getPacketLen(checkingTail->typeID);
-        if(tailAddr < packetLength - sizeof(struct packet_tail) + LOG_START_ADDR)
+        if(tailAddr < packetLength - sizeof(struct packet_tail) + logStart)
         {
             // protect against unsigned rollover when checking if packetStartAddr < LOG_START_ADDR
 #ifdef FL_DEBUG
@@ -521,7 +538,7 @@ bool FlashLog::tailDescribesValidPacket(struct packet_tail * checkingTail, bd_ad
 
 
 FLResultCode FlashLog::readTailAt(bd_addr_t addr, struct packet_tail* buf){
-    if(addr >= LOG_START_ADDR && addr <= LOG_END_ADDR - sizeof(struct packet_tail)){
+    if(addr >= logStart && addr <= logEnd - sizeof(struct packet_tail)){
         return readFromLog(buf, addr, sizeof(struct packet_tail));
     }
     else{
@@ -537,7 +554,7 @@ FLResultCode FlashLog::restoreFSMState(FL_STATE_T *s, ptimer_t *pwr_ctr, ptimer_
         return FL_ERROR_LOGNOINIT;
     }
 
-    if (lastTailAddr == LOG_START_ADDR) return FL_ERROR_EMPTY;
+    if (lastTailAddr == logStart) return FL_ERROR_EMPTY;
 
     // read initial packet tail, starting at lastTailAddr
     struct packet_tail * restorationTail;
@@ -684,12 +701,18 @@ int FlashLog::writePacket(uint8_t type, void *packet, ptimer_t pwr_ctr, ptimer_t
     }
     MBED_ASSERT(logInitialized);    //log must have been initialized
 
+    size_t len = getPacketLen(type);
+
+    if(len == 0)
+	{
+    	// packet type has not been added to getPacketLen()
+    	return FL_ERROR_TYPE;
+	}
+
     //Check for bounds
-    if(nextPacketAddr < LOG_START_ADDR || (nextPacketAddr+MAX_PACKET_LEN) > LOG_END_ADDR)
+    if(nextPacketAddr < logStart || (nextPacketAddr+MAX_PACKET_LEN) > logEnd)
         return FL_ERROR_BOUNDS;
 
-    int len, err;
-    len = getPacketLen(type);
     //populate the packet's tail
     populatePacketTail(type, len, packet, pwr_ctr, flight_ctr, state);
 
@@ -700,7 +723,7 @@ int FlashLog::writePacket(uint8_t type, void *packet, ptimer_t pwr_ctr, ptimer_t
     pc.printf("Current State: %s\r\n", FL_GET_STATE_NAME(state));
 #endif
 
-    err = writeToLog(packet, nextPacketAddr, len);
+    int err = writeToLog(packet, nextPacketAddr, len);
     if (!err)
     {
         lastPacketType = type;
@@ -723,31 +746,32 @@ int FlashLog::writePacket(uint8_t type, void *packet, ptimer_t pwr_ctr, ptimer_t
 */
 int FlashLog::wipeLog(bool complete)
 {
+#if !FL_IS_SPI_FLASH
     // buffer that only contains 0xFF to program the log with
-    static uint8_t eraseBuffer[SD_BLOCK_SIZE];
-    memset(eraseBuffer, 0xFF, SD_BLOCK_SIZE);
+    static uint8_t eraseBuffer[FL_MAX_BLOCK_SIZE];
+    memset(eraseBuffer, 0xFF, blockSize);
+#endif
 
     int err=0;
     // hopefully the block device size is always a clean multiple of the sector size
-    MBED_ASSERT(sdBlockDev.size() % SD_BLOCK_SIZE == 0);
+    MBED_ASSERT(sdBlockDev.size() % blockSize == 0);
 
     //get the flash block size--the smallest chunk of memory that can be independentyl erased
-    int erase_size = SD_BLOCK_SIZE;
     size_t lastPacketAddress = nextPacketAddr;
     // now erase sectors in order
-    pc.printf("Erasing flash log (0x%016" PRIx64 " - 0x%016" PRIx64 ").\r\n", LOG_START_ADDR, complete?LOG_END_ADDR:lastPacketAddress);
+    pc.printf("Erasing flash log (0x%016" PRIx64 " - 0x%016" PRIx64 ").\r\n", logStart, complete ? logEnd : lastPacketAddress);
 
     float prevProgress = 0;
 
-    for(bd_addr_t addr = LOG_START_ADDR; addr+erase_size<=LOG_END_ADDR; addr += erase_size)
+    for(bd_addr_t addr = logStart; addr+eraseBlockSize<=logEnd; addr += eraseBlockSize)
     {
         if(complete == false && addr > lastPacketAddress){
             break;
         }
 
         // Print progress if process has advanced at least 0.01%
-        float progress = ( (double) addr / (LOG_CAPACITY))*100;
-        if(progress - prevProgress > .01)
+        float progress = ( (float) addr / (getLogCapacity()))*100;
+        if(progress - prevProgress > .01f)
 		{
         	prevProgress = progress;
 			pc.printf("(%.02f%%)\r\n", progress);
@@ -755,37 +779,46 @@ int FlashLog::wipeLog(bool complete)
 
 		if(FL_IS_SPI_FLASH)
 		{
-			sdBlockDev.erase(addr, erase_size);
+			sdBlockDev.erase(addr, eraseBlockSize);
 		}
 		else
 		{
-			err = sdBlockDev.program(eraseBuffer, addr, SD_BLOCK_SIZE);
+			err = sdBlockDev.program(eraseBuffer, addr, eraseBlockSize);
 
 		}
+
+		// make sure watchdog doesn't time out while we are erasing
         Watchdog::get_instance().kick();
     }
     pc.printf("[FlashLog] Erase finished!\r\n");
 
-    nextPacketAddr = LOG_START_ADDR;
-    lastTailAddr = LOG_START_ADDR;
+    // reset all FlashLog data
+    nextPacketAddr = logStart;
+    lastTailAddr = logStart;
     packetsWritten = 0;
     lastPacketType = LOG_INVALID;
 
-    nextPacketToRead = LOG_START_ADDR;
+    nextPacketToRead = logStart;
+
+	// remove any data that may have been in the write cache
+	clearWriteCache();
     
     return err;
 }
 
 FLResultCode FlashLog::binaryDumpIterator(struct log_binary_dump_frame *frame, bool begin)
 {
-    static bd_addr_t nextReadAddr=LOG_START_ADDR;
+	// this code currently only works if the log size is an exact number of frames.
+	MBED_ASSERT(getLogCapacity() % sizeof(log_binary_dump_frame) == 0);
+
+    static bd_addr_t nextReadAddr=logStart;
     //begin a new iteration?
     if (begin)
     {
-        nextReadAddr = LOG_START_ADDR;
+        nextReadAddr = logStart;
     }
     //check if we're about to read over the end of the log
-    if (nextReadAddr + sizeof(log_binary_dump_frame) > LOG_END_ADDR)
+    if (nextReadAddr + sizeof(log_binary_dump_frame) > logEnd)
     {
         return FL_ITERATION_DONE;
     }
@@ -797,25 +830,36 @@ FLResultCode FlashLog::binaryDumpIterator(struct log_binary_dump_frame *frame, b
 
 FLResultCode FlashLog::binaryDumpReverseIterator(struct log_binary_dump_frame *frame, bool begin)
 {
-    static bd_addr_t nextReadAddrReverse = 0;
+	static bd_addr_t nextReadAddrReverse = 0; // one byte after the next byte we want to read
 
-    int64_t frame_len = sizeof(log_binary_dump_frame);
+    const int64_t frame_len = sizeof(log_binary_dump_frame);
+
+    // Flag value to indicate that the iterator has reached the log start
+    const bd_addr_t endMarker = std::numeric_limits<bd_addr_t>::max();
+
     //begin a new iteration?
     if (begin)
     {
         nextReadAddrReverse = nextPacketAddr; //address of the byte after the last byte written to the memory
     }
     //check if we're about to read over the end of start of the log
-    if (nextReadAddrReverse > LOG_END_ADDR || nextReadAddrReverse <= LOG_START_ADDR)
+    if (nextReadAddrReverse > logEnd || nextReadAddrReverse == endMarker)
     {
         return FL_ITERATION_DONE;
-    }else if(nextReadAddrReverse - frame_len < LOG_START_ADDR){
+    }
+	else if(nextReadAddrReverse - frame_len <= logStart)
+	{
         //not enough data to fill the full frame. will fill it partially
-        readFromLog(frame->bytes + frame_len - nextReadAddrReverse, LOG_START_ADDR, nextReadAddrReverse);
-        for(size_t i = 0; i < nextReadAddrReverse; i++){
-            frame->bytes[i] = 0;
-        }
-    }else{
+        readFromLog(frame->bytes + frame_len - nextReadAddrReverse, logStart, nextReadAddrReverse);
+        memset(&frame->bytes, 0, nextReadAddrReverse); // zero pad start
+
+        // indicate that the packet has reached the end
+        nextReadAddrReverse = endMarker;
+    }
+    else
+	{
+    	nextReadAddrReverse -= frame_len;
+
         //grab the next frame of data and return
         readFromLog(frame, nextReadAddrReverse - frame_len, frame_len);
     }
@@ -827,24 +871,23 @@ FLResultCode FlashLog::binaryDumpReverseIterator(struct log_binary_dump_frame *f
         frame->bytes[frame_len - i - 1] = temp;
     }
 
-    nextReadAddrReverse -= frame_len;
     return FL_SUCCESS;
 }
 
 
 bd_addr_t FlashLog::getLogCapacity()
 {
-    return LOG_CAPACITY;
+    return logEnd - logStart;
 }
 
 bd_addr_t FlashLog::getLogSize()
 {
-    return nextPacketAddr - LOG_START_ADDR;
+    return nextPacketAddr - logStart;
 }
 
 bd_addr_t FlashLog::getLogStartAddress()
 {
-    return LOG_START_ADDR;
+    return logStart;
 }
 
 bd_addr_t FlashLog::getLastTailAddr()
@@ -859,7 +902,7 @@ bd_addr_t FlashLog::findPacketTailBefore(bd_addr_t curPacketTailAddr, struct pac
         //compute the previous packet address from this.
 
         // check to make sure we don't start before the beginning of the log
-        if (curPacketTailAddr < LOG_START_ADDR + getPacketLen(curPacketTail->typeID))
+        if (curPacketTailAddr < logStart + getPacketLen(curPacketTail->typeID))
         {
 #ifdef FL_DEBUG
             pc.printf("[findPacketTailBefore] Next Packet will Underflow. NOTAIL");
@@ -903,10 +946,10 @@ bd_addr_t FlashLog::findPacketTailBefore(bd_addr_t curPacketTailAddr, struct pac
     {
         searchEndAddress = searchStartAddress - MAX_PACKETS_TO_CHECK * MAX_PACKET_LEN;
     }
-    if(searchEndAddress < LOG_START_ADDR)
+    if(searchEndAddress < logStart)
     {
-        // handle the case where LOG_START_ADDR > 0
-        searchEndAddress = LOG_START_ADDR;
+        // handle the case where logStart > 0
+        searchEndAddress = logStart;
     }
 
 #ifdef FL_DEBUG
@@ -968,10 +1011,10 @@ FLResultCode FlashLog::packetIterator(uint8_t *type, void *buf, bool begin) {
     int tailOffset = 0;
     bool dataExists = false;
     if (begin == true) {
-        nextPacketToRead = LOG_START_ADDR;
+        nextPacketToRead = logStart;
     }
 
-    if (nextPacketToRead < LOG_START_ADDR || nextPacketToRead > LOG_END_ADDR-MAX_PACKET_LEN) {
+    if (nextPacketToRead < logStart || nextPacketToRead > logEnd - MAX_PACKET_LEN) {
         //we're going out of the log's bounds.
         return FL_ERROR_BOUNDS;
     }
@@ -1031,7 +1074,7 @@ FLResultCode FlashLog::packetIterator(uint8_t *type, void *buf, bool begin) {
     }
     //Read the packet contents based on the type size, check left bound first
     bd_addr_t packetAddr = nextPacketToRead+tailOffset+sizeof(struct packet_tail)-len;
-    if(packetAddr < LOG_START_ADDR) {
+    if(packetAddr < logStart) {
         //packet start as detected here is somehow before the start of the log.
         return FL_ERROR_BOUNDS;
     }
@@ -1080,7 +1123,7 @@ void FlashLog::printLastNBytes (size_t nBytesPre, size_t nBytesPost)
 {
     uint8_t byte;
     bd_addr_t startaddr = (nextPacketAddr - nBytesPre);
-    for (bd_addr_t i=startaddr >= LOG_START_ADDR ? startaddr : LOG_START_ADDR; i<nextPacketAddr; i++) {
+    for (bd_addr_t i=startaddr >= logStart ? startaddr : logStart; i<nextPacketAddr; i++) {
         readFromLog(&byte, i, 1);
       if (i==lastTailAddr) pc.printf("\r\n[lastTailAddr]\r\n");
         if ((i-nextPacketAddr)%16 == 0) pc.printf("\r\n[%016" PRIX64 "]: ", i);
@@ -1222,6 +1265,12 @@ int FlashLog::findTailInBuffer(uint8_t *buf, size_t len, bool reverse) {
     PRINT_BYTES(buf, len);
     #endif
     return -1;
+}
+
+void FlashLog::clearWriteCache()
+{
+	memset(writeCache, 0xFF, blockSize);
+	writeCacheValid = false;
 }
 
 /* Uses the magic fields to confirm that the contents of buf are actually a

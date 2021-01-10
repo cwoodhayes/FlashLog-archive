@@ -43,7 +43,7 @@ int FlashLogHarness::test_chip_erase()
     int err;
 
     pc.printf("Chip initialized. Erasing\r\n");
-    err = sdBlockDev.erase(FLASH_START_ADDR, FLASH_END_ADDR-FLASH_START_ADDR);
+    err = sdBlockDev.erase(logStart, logEnd);
     if(err)
     {
         pc.printf("erase error %d\r\n", err);
@@ -51,7 +51,7 @@ int FlashLogHarness::test_chip_erase()
     }
 
     pc.printf("Starting to check chip erase...\r\n");
-    check_pattern(0xFFFFFFFF, LOG_START_ADDR, LOG_END_ADDR);
+    check_pattern(0xFFFFFFFF, logStart, logEnd);
 
     return 0;
 }
@@ -61,13 +61,13 @@ int FlashLogHarness::test_chip_erase()
 int FlashLogHarness::test_chip_write_pattern()
 {
     pc.printf("Starting to write pattern...\r\n");
-    return write_pattern(PATTERN, LOG_START_ADDR, LOG_END_ADDR);
+    return write_pattern(PATTERN, logStart, logEnd);
 }
 
 int FlashLogHarness::test_chip_check_pattern()
 {
     pc.printf("Starting to check pattern...\r\n");
-    return check_pattern(PATTERN, LOG_START_ADDR, LOG_END_ADDR);
+    return check_pattern(PATTERN, logStart, logEnd);
 }
 
 /*  Log a repeating pattern of packets using FlashLog until the memory is about half full. 
@@ -89,8 +89,8 @@ int FlashLogHarness::test_chip_write_packets()
     }
 
     //write a bunch of packets to about a quarter of the log
-    pc.printf("Starting to write packets at %08" PRIu64 ".\r\n", LOG_START_ADDR);
-    int i_max = (LOG_CAPACITY) / (2*AVG_PACKET_SIZE);
+    pc.printf("Starting to write packets at %08" PRIu64 ".\r\n", logStart);
+    int i_max = (getLogCapacity()) / (2*AVG_PACKET_SIZE);
     for (int i=0; i<i_max; i++)
     {
         uint8_t type = TP_LIST_TYPES[i % TP_LIST_SIZE];
@@ -115,11 +115,11 @@ int FlashLogHarness::test_chip_read_packets()
 
     char buf[MAX_PACKET_LEN];
     int err;
-    int i_max = (LOG_END_ADDR - LOG_START_ADDR) / (2*AVG_PACKET_SIZE);
-    int type, neq, len, addr = LOG_START_ADDR;
+    bd_size_t i_max = (logEnd - logStart) / (2*AVG_PACKET_SIZE);
+    int type, neq, len, addr = logStart;
 
     pc.printf("Beginning to read packets at %08x...\r\n", addr);
-    for (int i=0; i<i_max; i++) {       //TODO restore to i_max
+    for (bd_size_t i=0; i<i_max; i++) {       //TODO restore to i_max
         type = TP_LIST_TYPES[i % TP_LIST_SIZE];
         len = getPacketLen(type);
         err = sdBlockDev.read(buf, addr, len);
@@ -139,7 +139,7 @@ int FlashLogHarness::test_chip_read_packets()
         }
         if (i % (i_max/100) == 0)
         {
-            pc.printf("--%d%%\r\n", (i*100)/i_max);
+            pc.printf("--%" PRIu64 "%%\r\n", (i*100)/i_max);
         }
         addr += len;
     }
@@ -363,7 +363,7 @@ int FlashLogHarness::test_dump_binary(Stream &pc)
 int FlashLogHarness::test_check_erase()
 {
     pc.printf("Confirming erase FL_SUCCESSful...\r\n");
-    int mismatches = check_pattern(0xFFFFFFFF, LOG_START_ADDR, LOG_END_ADDR);
+    int mismatches = check_pattern(0xFFFFFFFF, logStart, logEnd);
     (mismatches == 0) ? pc.printf("[PASS] ") : pc.printf("[FAIL] ");
     pc.printf("%d errors found.\r\n", mismatches);
     return mismatches;
@@ -404,22 +404,22 @@ void FlashLogHarness::startTimers(uint64_t offset)
 
 int FlashLogHarness::write_pattern(uint32_t pattern, bd_addr_t start_addr, bd_size_t len)
 {
-    uint32_t buf[SD_BLOCK_SIZE / 4]; // divide byte block size by 4 because buffer is 32 bit ints
+    static uint32_t buf[FL_MAX_BLOCK_SIZE / 4]; // divide byte block size by 4 because buffer is 32 bit ints
     //fill the buf with the repeating pattern
-    for (int i=0; i<SD_BLOCK_SIZE / 4; i++)
+    for (int i=0; i<blockSize / 4; i++)
     {
         buf[i] = pattern;
     }
 
     //write the buf to the memory over and over. Writes big chunks to minimize use of the SPI line.
     //rounds down the len to align with the nearest 0x100'th byte
-    bd_size_t num_steps = len / SD_BLOCK_SIZE;
+    bd_size_t num_steps = len / blockSize;
     uint32_t print_threshold = num_steps / 100;
     bd_addr_t cur_step = 0;
-    for (bd_addr_t i = start_addr; (i+SD_BLOCK_SIZE)<(start_addr+len); i+=SD_BLOCK_SIZE)
+    for (bd_addr_t i = start_addr; (i+blockSize)<(start_addr+len); i+=blockSize)
     {
         //write 256 bytes in a chunk
-        int err = sdBlockDev.program(buf, i, SD_BLOCK_SIZE);
+        int err = sdBlockDev.program(buf, i, blockSize);
         if (err)
         {
             pc.printf("Write error at 0x%08" PRIX64 ".\r\n", i);
@@ -436,22 +436,22 @@ int FlashLogHarness::write_pattern(uint32_t pattern, bd_addr_t start_addr, bd_si
 
 int FlashLogHarness::check_pattern(uint32_t pattern, bd_addr_t start_addr, bd_size_t len)
 {
-    char buf[SD_BLOCK_SIZE];
+    static char buf[FL_MAX_BLOCK_SIZE];
     int mismatch_cnt = 0;
     //rounds down the len to align with the nearest 0x100'th byte
-    uint32_t num_steps = len / SD_BLOCK_SIZE;
+    uint32_t num_steps = len / blockSize;
     uint32_t print_threshold = num_steps / 100;
     uint32_t cur_step = 0;
-    for (bd_addr_t i=start_addr; i+SD_BLOCK_SIZE<start_addr+len; i+=SD_BLOCK_SIZE)
+    for (bd_addr_t i=start_addr; i+blockSize<start_addr+len; i+=blockSize)
     {
-        int err = sdBlockDev.read(buf, i, SD_BLOCK_SIZE);
+        int err = sdBlockDev.read(buf, i, blockSize);
         if (err)
         {
             pc.printf("Read error at 0x%08" PRIX64 " .\r\n", i);
             return -1;
         }
         // check 4 bytes at a time
-        for (int j=0; j<SD_BLOCK_SIZE / 4; j++)
+        for (int j=0; j<blockSize / 4; j++)
         {
             if(reinterpret_cast<uint32_t *>(buf)[j] != pattern)
             {
@@ -471,7 +471,7 @@ int FlashLogHarness::check_pattern(uint32_t pattern, bd_addr_t start_addr, bd_si
 int FlashLogHarness::test_writeAtLargeAddress(){
 
     pc.printf("Chip initialized. \r\n");
-    pc.printf("MAX SIZE: %" PRIx64 "\r\n", LOG_END_ADDR);
+    pc.printf("MAX SIZE: %" PRIx64 "\r\n", logEnd);
     uint32_t buf = 0xdeadbeef;
     sdBlockDev.program(&buf, 0x03FFFFF0, 4);
     uint32_t frame;

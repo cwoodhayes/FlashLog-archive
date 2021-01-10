@@ -20,17 +20,6 @@
 #include <BlockDevice.h>
 #include <Stream.h>
 
-//it's nice to test with a shorter log so the tests don't take ages.
-#define LOG_START_ADDR 			FLASH_START_ADDR
-
-#if FL_REDUCE_SIZE
-#define LOG_END_ADDR 				(FLASH_END_ADDR/512)
-#else //DEBUG-BUILD
-#define LOG_END_ADDR				FLASH_END_ADDR
-#endif
-
-#define LOG_CAPACITY						(LOG_END_ADDR - LOG_START_ADDR)
-
 // how far backward restoreFSMState() will look for a valid packet to read state info from
 #define MAX_PACKETS_TO_CHECK 10
 
@@ -43,7 +32,7 @@ enum FLResultCode
 	FL_ERROR_BOUNDS = -1, // Log is full and/or the current operation would go out of bounds
 	FL_ERROR_EMPTY = -2, // Indicates that the flashlog is empty
 	FL_ERROR_CHECKSUM = -3,
-	FL_ERROR_TYPE  = -4,
+	FL_ERROR_TYPE  = -4, // unrecognized packet type encountered
 	FL_ERROR_NOTAIL = -5,
 	FL_ERROR_LOGNOINIT = -6, // Log did not init successfully earlier, so can't perform this operation
 	FL_ERROR_FSM_NOT_RESTORED = -7, // Failed to find a valid packet from which to restore state.
@@ -51,8 +40,6 @@ enum FLResultCode
 	FL_ERROR_BD_INIT = -10, // Error initializing block device
 	FL_ERROR_BD_IO = -11, // Error reading to or writing from block device
 };
-
-#define SD_BLOCK_SIZE 512
 
 /**
  * @brief      Macro for easily iterating through a binary dump
@@ -149,7 +136,7 @@ public:
 
 	/**
 	 * @brief      Erase the contents of the log
-	 * @param[in]  complete  if false, will only erase uptill the last packet
+	 * @param[in]  complete  if false, will only erase uptill the last packet.  Otherwise, erases entire chip
 	 * @return     sdBlockDev error
 	 */
 	int wipeLog(bool complete=true);
@@ -331,6 +318,13 @@ protected:
      * The flash chip is a block device, and FlashLog is built on top of the block device
      */
 	BlockDevice & sdBlockDev;
+
+	// The addresses that the FlashLog runs between on the flash device
+	bd_addr_t logStart;
+	bd_addr_t logEnd; // 1 greater than the largest accessible address
+	bd_size_t blockSize; // Reading and writing must be done in blocks of at least this size
+	bd_size_t eraseBlockSize; // Erasing must be done in blocks of at least this size
+
 	bd_addr_t nextPacketAddr;		//next empty address in the log
 	bd_addr_t nextPacketToRead;	//next packet in a read-through of the log
 
@@ -342,15 +336,19 @@ protected:
     bool logInitialized;	//set upon successful call of initLog
     int packetsWritten;		//this is wrong after a brownout, so don't depend on it
 
-
     // buffer that fills before timeout to allow writing in blocks
-    uint8_t timeoutBuffer[SD_BLOCK_SIZE] = {0xFF};
-    // address of the last write to get difference for positioning inside
+    uint8_t writeCache[FL_MAX_BLOCK_SIZE];
+
+    // true if a block is currently being cached in the write cache.
+    // If false, no cache data is valid.
+    bool writeCacheValid = false;
+
+    // Flash address of the last write to get difference for positioning inside
     // timeoutBuffer
-    bd_addr_t lastWrite = UINT64_MAX;
-    // address of first write inside timeoutBuffer for call to
-    // SDBlockDevice::program
-    bd_addr_t firstWritePosition = 0;
+    bd_addr_t lastCacheWriteAddr;
+
+
+    bd_addr_t cacheBlockAddress = 0; // Sector address that the writeCache currently is caching
 
     bool firstWriteToLog = true;
 
@@ -399,7 +397,7 @@ protected:
 	 */
 	inline bd_addr_t roundDownToNearestBlock(bd_addr_t address)
 	{
-		return (address / SD_BLOCK_SIZE) * SD_BLOCK_SIZE;
+		return (address / blockSize) * blockSize;
 	}
 
 	/**
@@ -410,7 +408,7 @@ protected:
 	 */
 	inline bd_addr_t roundUpToNearestBlock(bd_addr_t address)
 	{
-		return ((address + SD_BLOCK_SIZE - 1) / SD_BLOCK_SIZE) * SD_BLOCK_SIZE;
+		return ((address + blockSize - 1) / blockSize) * blockSize;
 	}
 
 	/**
@@ -423,6 +421,11 @@ protected:
 	 * @return     Distance of the tail's start from the start of buf, in bytes
 	 */
 	int findTailInBuffer(uint8_t *buf, size_t len, bool reverse=false);
+
+	/**
+	 * Clear all stored information in the write cache, and prepare for it to load a new block for writing.
+	 */
+	void clearWriteCache();
 
 };
 
