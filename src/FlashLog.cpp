@@ -50,7 +50,7 @@ std::pair<bd_error, FLResultCode> FlashLog::initLog() {
     bd_error blockDevErr = static_cast<bd_error>(sdBlockDev.init());
     if (blockDevErr)
     {
-        pc.printf("[SDBlockDevice] Error %d initializing device!", blockDevErr);
+        pc.printf("[FlashLog] Error %d initializing device!", blockDevErr);
         return {blockDevErr, FL_ERROR_BD_INIT};
     }
 
@@ -64,11 +64,19 @@ std::pair<bd_error, FLResultCode> FlashLog::initLog() {
 	// detect log size from block device
 	logEnd = sdBlockDev.size() / FL_SIZE_DIVISOR;
 
+#if !FL_IS_SPI_FLASH
+	if(sdBlockDev.get_program_size() == sdBlockDev.get_read_size() || sdBlockDev.get_program_size() == sdBlockDev.get_erase_size())
+	{
+		pc.printf("[FlashLog] Error: Program, erase, and read sizes of the memory must be equal in SD card mode\r\n");
+	}
+#endif
+
 	MBED_ASSERT(sdBlockDev.get_program_size() == sdBlockDev.get_read_size());
 	blockSize = sdBlockDev.get_program_size();
 	if(blockSize > FL_MAX_BLOCK_SIZE)
 	{
-		pc.printf("Error: FlashLog was not compiled with support for memory with block size %" PRIu64 ", please increase FL_MAX_BLOCK_SIZE\r\n", blockSize);
+		pc.printf("[FlashLog] Error: Not compiled with support for memory with block size %" PRIu64 ", please increase FL_MAX_BLOCK_SIZE\r\n", blockSize);
+		return {BD_ERROR_OK, FL_ERROR_BD_PARAMS};
 	}
 
 	eraseBlockSize = sdBlockDev.get_erase_size();
@@ -777,15 +785,11 @@ int FlashLog::wipeLog(bool complete)
 			pc.printf("(%.02f%%)\r\n", progress);
 		}
 
-		if(FL_IS_SPI_FLASH)
-		{
-			sdBlockDev.erase(addr, eraseBlockSize);
-		}
-		else
-		{
-			err = sdBlockDev.program(eraseBuffer, addr, eraseBlockSize);
-
-		}
+#if FL_IS_SPI_FLASH
+		err = sdBlockDev.erase(addr, eraseBlockSize);
+#else
+		err = sdBlockDev.program(eraseBuffer, addr, blockSize);
+#endif
 
 		// make sure watchdog doesn't time out while we are erasing
         Watchdog::get_instance().kick();

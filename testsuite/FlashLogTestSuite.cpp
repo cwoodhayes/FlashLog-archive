@@ -483,7 +483,7 @@ int FlashLogHarness::test_writeAtLargeAddress(){
 int FlashLogHarness::test_bulkErase(){
 
 #if FL_IS_SPI_FLASH
-	sdBlockDev.bulk_erase();
+	static_cast<SPIFBlockDevice &>(sdBlockDev).bulk_erase();
     test_check_erase();
 #else
     pc.printf("Bulk erase not implemented!\r\n");

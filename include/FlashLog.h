@@ -39,6 +39,7 @@ enum FLResultCode
 	FL_ERROR_LOG_EXISTS = -9, // Indicates that the flashlog is not empty but the last packet could not be found
 	FL_ERROR_BD_INIT = -10, // Error initializing block device
 	FL_ERROR_BD_IO = -11, // Error reading to or writing from block device
+	FL_ERROR_BD_PARAMS = -12, // Error with parameters/configuration of block device
 };
 
 /**
