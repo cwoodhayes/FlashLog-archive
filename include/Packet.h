@@ -22,6 +22,7 @@
  * 4. Add a new case for your packet in printPacket() in Packet.cpp
  * 5. Add a new case for your packet in the switch statement in getPacketLen() in Packet.cpp
  * 6. Add a new case which calls your print macro in test_chip_iterate_packets() in the FlashLog test suite.
+ * 7. If the new packet is longer than MAX_PACKET_LEN, increase MAX_PACKET_LEN
  */
 
 //Log data types
@@ -46,7 +47,9 @@
 
 #define MAX_PACKET_LEN sizeof(log_packet_text)
 
+// Timer type in microseconds
 typedef uint64_t ptimer_t;		//may eventually decide to shorten this is we ever get short on room
+
 typedef uint32_t checksum_t;
 
 /* 	Struct to contain packet metadata

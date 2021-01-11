@@ -135,10 +135,13 @@ FLResultCode FlashLog::findLastPacket() {
 
     // If the block size is > 2*max, then we need to search based on that in order to handle blanks of up to SD_BLOCK_SIZE - 1
     // Otherwise, needs to be 2*max rounded up to the nearest block for when we find the END of the last packet.
-    const size_t maxSearchBlockSize = (2*MAX_PACKET_LEN + FL_MAX_BLOCK_SIZE - 1)/FL_MAX_BLOCK_SIZE * FL_MAX_BLOCK_SIZE;
-	const size_t searchBlockSize = (2*MAX_PACKET_LEN + blockSize - 1)/blockSize * blockSize;
+	const size_t searchBlockSize = (MAX_PACKET_LEN + blockSize - 1)/blockSize * blockSize;
 
-    static uint8_t buf[maxSearchBlockSize];
+	// Buffer needs to be allocated as the max possible searchBlockSize, plus one extra MAX_PACKET_LEN
+	const size_t blockBufferSize = (MAX_PACKET_LEN + FL_MAX_BLOCK_SIZE - 1)/FL_MAX_BLOCK_SIZE * FL_MAX_BLOCK_SIZE + MAX_PACKET_LEN;
+
+
+	static uint8_t buf[blockBufferSize];
     MBED_ASSERT(end - start >= 2 * searchBlockSize); // make sure that the loop is actually entered
 
     //binary search until we're somewhere inside the last packet
@@ -180,36 +183,40 @@ FLResultCode FlashLog::findLastPacket() {
         return FL_ERROR_BOUNDS;
     }
 
-    // The end of the last packet is now somewhere between `start` and `end`
-#ifdef FL_DEBUG
-	readFromLog(buf, start, searchBlockSize);
-    pc.printf("discovered end of logfile near %016" PRIX64 ". Printing buffer contents:\r\n", start);
-    PRETTYPRINT_BYTES(buf, searchBlockSize, start);
-#endif
 
-    /*    Now we have the approximate address of the last packet, but we need to know exactly
-            where it ends. Since all packets end in magic3, which is 0xCCCCCCCC, this is easy--creep along until
-            we haven't seen anything but FF in MAX_PACKET_LEN bytes, then use the last time we saw 0's as
-            the end of the tail. */
-    bd_addr_t approx_last_packet_begin = (start - logStart < MAX_PACKET_LEN) ? logStart : start-MAX_PACKET_LEN;
+	// The end of the last packet is now somewhere between `start` and `end`.
+	// The size of this region is somewhere between 1 and 2 search blocks.
+	// (Remember, it must be >=1 block to tolerate up to (blockSize-1) of fill bytes)
 
-	FLResultCode readError = readFromLog(buf, approx_last_packet_begin, 2*MAX_PACKET_LEN);    //fill up the buffer in one shot
+    // We know that the end of the last packet is somewhere between start and end.
+    // So, expand the region backward to definitely without fail contain the entire last packet.
+	bd_addr_t finalRegionStart = (start - logStart < MAX_PACKET_LEN) ? logStart : start-MAX_PACKET_LEN;
+
+	const bd_size_t finalRegionSize = end - finalRegionStart;
+
+	// sanity check
+	MBED_ASSERT(sizeof(buf) >= finalRegionSize);
+
+	FLResultCode readError = readFromLog(buf, finalRegionStart, finalRegionSize);    //fill up the buffer in one shot
 	if(readError)
 	{
 		err = readError;
 	}
 
 #ifdef FL_DEBUG
-	pc.printf("Last packet must begin <1 search block after %016" PRIX64 ". Printing buffer contents:\r\n", approx_last_packet_begin);
-	PRETTYPRINT_BYTES(buf, 2*MAX_PACKET_LEN, approx_last_packet_begin);
+	readFromLog(buf, finalRegionStart, finalRegionSize);
+	pc.printf("discovered end of logfile near %016" PRIX64 ". Final packet must exist somewhere in this region:\r\n", start);
+    PRETTYPRINT_BYTES(buf, finalRegionSize, finalRegionStart);
 #endif
-    uint32_t lastDirtyByte =0;
-    for (size_t i=0; i<2*MAX_PACKET_LEN; i++) {
-        if (buf[i] != 0xFF) lastDirtyByte = i;
+
+	/*Creep along until we haven't seen anything but FF in MAX_PACKET_LEN bytes, then use the last time we saw 0 bits as
+	the end of the tail.*/
+    bd_addr_t lastDirtyByte =0;
+    for (bd_addr_t currAddr = finalRegionStart; currAddr < end; currAddr++) {
+        if (buf[currAddr - finalRegionStart] != 0xFF) lastDirtyByte = currAddr;
     }
 #ifdef FL_DEBUG
-    pc.printf("Last dirty byte found at flash address 0x%016" PRIX64 "\r\n",
-              approx_last_packet_begin+lastDirtyByte);
+    pc.printf("\r\nLast dirty byte found at flash address 0x%016" PRIX64 "\r\n", lastDirtyByte);
 #endif
 
     /*     initLog() doesn't actually fully handle the tailless-packet case. If it discovers that the last
@@ -227,23 +234,24 @@ FLResultCode FlashLog::findLastPacket() {
     if(tailValid)
     {
         // try viewing the data as a tail
-        memcpy(&possibleTail, buf+lastDirtyByte-sizeof(struct packet_tail)+1, sizeof(struct packet_tail));
+        memcpy(&possibleTail, buf+(lastDirtyByte-finalRegionStart)-sizeof(struct packet_tail)+1, sizeof(struct packet_tail));
 
         //tailp now points to the first byte in the tail, if this is a valid packet
 #ifdef FL_DEBUG
-        pc.printf("Hopefully this is a tail. If not, we'll mark it as invalid and handle it in restoreFSMState:\r\n");
+        pc.printf("Hopefully this is a tail. If not, we'll mark it as invalid and handle it in restoreFSMState:");
         PRETTYPRINT_BYTES(&possibleTail, sizeof(struct packet_tail), lastDirtyByte-sizeof(struct packet_tail)+1);
+        pc.printf("\r\n");
 #endif
 
         tailValid = isTail(&possibleTail);
     }
 
     //finally, use the found tail to populate the class data members.
-    nextPacketAddr = approx_last_packet_begin + lastDirtyByte + 1;
+    nextPacketAddr = lastDirtyByte + 1;
     //if this isn't a valid tail, write a valid tail marking this as an invalid packet and continue
     if (tailValid) 
     {
-            lastPacketType = possibleTail.typeID;        
+    	lastPacketType = possibleTail.typeID;
     }
     else
     {
@@ -590,6 +598,7 @@ FLResultCode FlashLog::restoreFSMState(FL_STATE_T *s, ptimer_t *pwr_ctr, ptimer_
     if(!FL_IS_VALID_STATE(((FL_STATE_T) restorationTail->state)))
 	{
     	// invalid state ID -- maybe data is from a different version of the application?
+		pc.printf("FATAL ERROR: Valid packet found but state %" PRIu8 " is not valid. \r\n", restorationTail->state);
 		return FL_ERROR_FSM_NOT_RESTORED;
 	}
 

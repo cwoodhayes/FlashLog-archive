@@ -5,16 +5,12 @@
     Contributors: 
  */
 
+#include "FlashLogTestSuite.h"
+
 #include <mbed.h>
 #include <SerialStream.h>
 
 #include <string>
-
-
-#include "Packet.h"
-#include "FlashLog.h"
-
-#include "FlashLogTestSuite.h"
 
 BufferedSerial serial(USBTX, USBRX, 115200);
 SerialStream<BufferedSerial> pcStream(serial); // can't name it pc due to conflict with FlashLog class variable
@@ -96,9 +92,7 @@ int FlashLogHarness::test_chip_write_packets()
         uint8_t type = TP_LIST_TYPES[i % TP_LIST_SIZE];
         void *buf = TP_LIST[i % TP_LIST_SIZE];
         // PRINT_PACKET_BYTES(type, buf);
-        writePacket(type, buf,
-					std::chrono::duration_cast<std::chrono::microseconds>(powerTimer.elapsed_time()).count(),
-					std::chrono::duration_cast<std::chrono::microseconds>(flightTimer.elapsed_time()).count(), fsmState);
+        writePacket(type, buf, getPowerTimer(), getFlightTimer(), fsmState);
         if (i % (i_max/100) == 0)
         {
             pc.printf("%.01f%%\r\n", ((double)i/i_max)*100);
@@ -267,26 +261,30 @@ int FlashLogHarness::test_brownout_recovery()
     if (err.second == FL_ERROR_LOG_EXISTS)
     {
         fsmState = FL_HARNESS_EXAMPLE_STATE;
-        pc.printf("PRE-RESTORE:\tflightTimer = %" PRIu64 "ms;\t", flightTimer.read_ms());
-        pc.printf("powerTimer = %" PRIu64 "ms;\t", powerTimer.read_ms());
+        pc.printf("PRE-RESTORE:\tflightTimer = %" PRIu64 "us;\t", getFlightTimer());
+        pc.printf("powerTimer = %" PRIu64 "us;\t", getPowerTimer());
         pc.printf("fsmState = %s\r\n", FL_GET_STATE_NAME(fsmState));
 
 
         uint64_t restoredPowerTimer;
         uint64_t restoredFlightTimer;
         int err = restoreFSMState(&fsmState, &restoredPowerTimer, &restoredFlightTimer); 
-        if (err == FL_SUCCESS){
+        if (err == FL_SUCCESS)
+        {
 
-        	// TODO implement restoring timers
-            //powerTimer.stop();
-            //powerTimer.start(restoredPowerTimer);
+        	powerTimer.stop();
+        	powerTimer.reset();
+        	powerTimerOffset = restoredPowerTimer;
+        	powerTimer.start();
 
-            //flightTimer.stop();
-            //flightTimer.start(restoredFlightTimer);
+			flightTimer.stop();
+			flightTimer.reset();
+			flightTimerOffset = restoredFlightTimer;
+			flightTimer.start();
         }
 
-        pc.printf("POST-RESTORE:\tflightTimer = %lldms;\t", flightTimer.read_ms());
-        pc.printf("powerTimer = %" PRIu64 "ms;\t", powerTimer.read_ms());
+		pc.printf("POST-RESTORE:\tflightTimer = %" PRIu64 "us;\t", getFlightTimer());
+		pc.printf("powerTimer = %" PRIu64 "us;\t", getPowerTimer());
         pc.printf("fsmState = %s\r\n", FL_GET_STATE_NAME(fsmState));
         printLastNBytes(0x50, 0x50);
         pc.printf("restoreFSMState exited with error %d\r\n", err);
@@ -394,19 +392,19 @@ int FlashLogHarness::test_checksum()
 
 void FlashLogHarness::startTimers(uint64_t offset)
 {
-	// TODO implement timer offsets
-    /*flightTimer.init();
-    powerTimer.init();
-    flightTimer.start(offset);
-    ThisThread::sleep_for(1s);
-    powerTimer.start(offset);*/
+    flightTimer.reset();
+    powerTimer.reset();
+
+    // set flight timer 1 sec ahead of flight timer
+    flightTimerOffset = offset;
+    powerTimerOffset = offset + 1e6;
 }
 
 int FlashLogHarness::write_pattern(uint32_t pattern, bd_addr_t start_addr, bd_size_t len)
 {
     static uint32_t buf[FL_MAX_BLOCK_SIZE / 4]; // divide byte block size by 4 because buffer is 32 bit ints
     //fill the buf with the repeating pattern
-    for (int i=0; i<blockSize / 4; i++)
+    for (bd_size_t i=0; i<blockSize / 4; i++)
     {
         buf[i] = pattern;
     }
@@ -451,7 +449,7 @@ int FlashLogHarness::check_pattern(uint32_t pattern, bd_addr_t start_addr, bd_si
             return -1;
         }
         // check 4 bytes at a time
-        for (int j=0; j<blockSize / 4; j++)
+        for (bd_size_t j=0; j<blockSize / 4; j++)
         {
             if(reinterpret_cast<uint32_t *>(buf)[j] != pattern)
             {

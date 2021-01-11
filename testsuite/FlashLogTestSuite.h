@@ -1,5 +1,11 @@
 #pragma once
 
+#include <chrono>
+
+#include <FlashLog.h>
+
+namespace chrono = std::chrono;
+
 class FlashLogHarness : public FlashLog
 {
 	public:
@@ -136,10 +142,37 @@ class FlashLogHarness : public FlashLog
 
 	private:
 
+		/* Global variables for use in all test functions: */
+		Timer flightTimer;
+		Timer powerTimer;
+		FL_STATE_T fsmState = FL_HARNESS_EXAMPLE_STATE;
+
+		// Offsets to store restored timer values
+		ptimer_t powerTimerOffset = 0;
+		ptimer_t flightTimerOffset = 0;
+
 		/**
 		 * @brief      Start the fake flight + power timers
 		 */
 		void startTimers(uint64_t offset=0);
+
+		/**
+		 * Get the power timer value in microseconds, factoring in the offset
+		 * @return
+		 */
+		ptimer_t getPowerTimer()
+		{
+			return chrono::duration_cast<chrono::microseconds>(powerTimer.elapsed_time()).count() + powerTimerOffset;
+		}
+
+		/**
+		 * Get the flight timer value in microseconds, factoring in the offset
+		 * @return
+		 */
+		ptimer_t getFlightTimer()
+		{
+			return chrono::duration_cast<chrono::microseconds>(flightTimer.elapsed_time()).count() + flightTimerOffset;
+		}
 
 		/**
 		 * @brief      Writes a pattern across the flash memory
@@ -164,10 +197,7 @@ class FlashLogHarness : public FlashLog
 		int check_pattern(uint32_t pattern, bd_addr_t start_addr, bd_size_t len);
 
 
-		/* Global variables for use in all test functions: */
-		Timer flightTimer;
-		Timer powerTimer;
-		FL_STATE_T fsmState = FL_INVALID_STATE;
+
 };
 
 //test packet instantiation
