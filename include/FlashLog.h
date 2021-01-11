@@ -353,6 +353,22 @@ protected:
 
     bool firstWriteToLog = true;
 
+	// Buffer needs to be allocated as the max possible searchBlockSize, plus one extra MAX_PACKET_LEN
+#define BINARY_SEARCH_BUFFER_SIZE ((MAX_PACKET_LEN + FL_MAX_BLOCK_SIZE - 1)/FL_MAX_BLOCK_SIZE * FL_MAX_BLOCK_SIZE + MAX_PACKET_LEN)
+
+	/**
+	 * The scratch buffer is used by a number of different functions that need scratch space.
+     * Its contents are undefined before the function is called.
+     * The size is the larger of the binary search buffer size (which has its own formula),
+     * and one sector of the memory.
+     *
+     * Current functions using the scratch buffer (calling these will clobber it):
+     * - findLastPacket()
+     * - wipeLog()
+     * - tailDescribesValidPacket()
+	 */
+	uint8_t scratchBuffer[std::max(static_cast<bd_addr_t>(BINARY_SEARCH_BUFFER_SIZE), static_cast<bd_addr_t>(FL_MAX_BLOCK_SIZE))];
+
 	/** Returns true if a log already exists on the chip.
 
 	 Currently, it just checks the first 90 bytes for any zero bits (erased sectors are always 0xFF).

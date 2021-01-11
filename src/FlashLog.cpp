@@ -137,12 +137,9 @@ FLResultCode FlashLog::findLastPacket() {
     // Otherwise, needs to be 2*max rounded up to the nearest block for when we find the END of the last packet.
 	const size_t searchBlockSize = (MAX_PACKET_LEN + blockSize - 1)/blockSize * blockSize;
 
-	// Buffer needs to be allocated as the max possible searchBlockSize, plus one extra MAX_PACKET_LEN
 	const size_t blockBufferSize = (MAX_PACKET_LEN + FL_MAX_BLOCK_SIZE - 1)/FL_MAX_BLOCK_SIZE * FL_MAX_BLOCK_SIZE + MAX_PACKET_LEN;
 
-
-	static uint8_t buf[blockBufferSize];
-    MBED_ASSERT(end - start >= 2 * searchBlockSize); // make sure that the loop is actually entered
+	MBED_ASSERT(end - start >= 2 * searchBlockSize); // make sure that the loop is actually entered
 
     //binary search until we're somewhere inside the last packet
     bool isPacket = false;
@@ -153,7 +150,7 @@ FLResultCode FlashLog::findLastPacket() {
         // We will check searchBlockSize bytes starting from the middle of the current memory region, given here.
         middle = start/2+end/2;    //2 divisions to avoid unsigned overflow
 
-        FLResultCode readError = readFromLog(buf, middle, searchBlockSize);
+        FLResultCode readError = readFromLog(scratchBuffer, middle, searchBlockSize);
 
         if(readError)
 		{
@@ -162,14 +159,14 @@ FLResultCode FlashLog::findLastPacket() {
         isPacket = false;
 
         for (size_t i=0; i<searchBlockSize; i++) {    //TODO just use 32 bit operands where possible
-            if (buf[i] != 0xFF) {
+            if (scratchBuffer[i] != 0xFF) {
                 isPacket = true;
                 break;
             }
         }
 #ifdef FL_DEBUG
         pc.printf("\tBinary search: checking middle of 0x%016" PRIX64 "-0x%016" PRIX64 " range (0x%016" PRIX64 ") for any packet data\r\n", start, end, middle);
-        PRINT_BYTES(buf, MAX_PACKET_LEN);
+        PRINT_BYTES(scratchBuffer, MAX_PACKET_LEN);
         pc.printf("\r\n");
 #endif
 
@@ -195,25 +192,25 @@ FLResultCode FlashLog::findLastPacket() {
 	const bd_size_t finalRegionSize = end - finalRegionStart;
 
 	// sanity check
-	MBED_ASSERT(sizeof(buf) >= finalRegionSize);
+	MBED_ASSERT(sizeof(scratchBuffer) >= finalRegionSize);
 
-	FLResultCode readError = readFromLog(buf, finalRegionStart, finalRegionSize);    //fill up the buffer in one shot
+	FLResultCode readError = readFromLog(scratchBuffer, finalRegionStart, finalRegionSize);    //fill up the buffer in one shot
 	if(readError)
 	{
 		err = readError;
 	}
 
 #ifdef FL_DEBUG
-	readFromLog(buf, finalRegionStart, finalRegionSize);
+	readFromLog(scratchBuffer, finalRegionStart, finalRegionSize);
 	pc.printf("discovered end of logfile near %016" PRIX64 ". Final packet must exist somewhere in this region:\r\n", start);
-    PRETTYPRINT_BYTES(buf, finalRegionSize, finalRegionStart);
+    PRETTYPRINT_BYTES(scratchBuffer, finalRegionSize, finalRegionStart);
 #endif
 
 	/*Creep along until we haven't seen anything but FF in MAX_PACKET_LEN bytes, then use the last time we saw 0 bits as
 	the end of the tail.*/
     bd_addr_t lastDirtyByte =0;
     for (bd_addr_t currAddr = finalRegionStart; currAddr < end; currAddr++) {
-        if (buf[currAddr - finalRegionStart] != 0xFF) lastDirtyByte = currAddr;
+        if (scratchBuffer[currAddr - finalRegionStart] != 0xFF) lastDirtyByte = currAddr;
     }
 #ifdef FL_DEBUG
     pc.printf("\r\nLast dirty byte found at flash address 0x%016" PRIX64 "\r\n", lastDirtyByte);
@@ -234,7 +231,7 @@ FLResultCode FlashLog::findLastPacket() {
     if(tailValid)
     {
         // try viewing the data as a tail
-        memcpy(&possibleTail, buf+(lastDirtyByte-finalRegionStart)-sizeof(struct packet_tail)+1, sizeof(struct packet_tail));
+        memcpy(&possibleTail, scratchBuffer+(lastDirtyByte-finalRegionStart)-sizeof(struct packet_tail)+1, sizeof(struct packet_tail));
 
         //tailp now points to the first byte in the tail, if this is a valid packet
 #ifdef FL_DEBUG
@@ -380,7 +377,7 @@ int FlashLog::writeToLog(const void *buffer, bd_addr_t addr, bd_size_t size)
 
 FLResultCode FlashLog::readFromLog(void *buffer, bd_addr_t addr, bd_size_t size)
 {
-    static uint8_t temporaryBuffer[FL_MAX_BLOCK_SIZE] = {0};
+    static uint8_t readBuffer[FL_MAX_BLOCK_SIZE] = {0};
     int err = 0;
     bd_size_t sizeRemaining = size;
     size_t nextByteIndex = 0; // next index to write to in the buffer
@@ -397,7 +394,7 @@ FLResultCode FlashLog::readFromLog(void *buffer, bd_addr_t addr, bd_size_t size)
 	else
 	{
 		// read block containing prologue
-		err = sdBlockDev.read(temporaryBuffer, roundDownToNearestBlock(addr), blockSize);
+		err = sdBlockDev.read(readBuffer, roundDownToNearestBlock(addr), blockSize);
 
 		if(err != BD_ERROR_OK)
 		{
@@ -414,7 +411,7 @@ FLResultCode FlashLog::readFromLog(void *buffer, bd_addr_t addr, bd_size_t size)
 			prologueLength = sizeRemaining;
 		}
 
-		memcpy(reinterpret_cast<uint8_t *>(buffer) + nextByteIndex, temporaryBuffer + offsetIntoPrologueBlock, prologueLength);
+		memcpy(reinterpret_cast<uint8_t *>(buffer) + nextByteIndex, readBuffer + offsetIntoPrologueBlock, prologueLength);
 		sizeRemaining -= prologueLength;
 		nextByteIndex += prologueLength;
 	}
@@ -463,7 +460,7 @@ FLResultCode FlashLog::readFromLog(void *buffer, bd_addr_t addr, bd_size_t size)
 	MBED_ASSERT(epilogueStart != epilogueEnd);
 
 	// read block containing epilogue
-	err = sdBlockDev.read(temporaryBuffer, epilogueStart, blockSize);
+	err = sdBlockDev.read(readBuffer, epilogueStart, blockSize);
 
 	if(err != BD_ERROR_OK)
 	{
@@ -473,7 +470,7 @@ FLResultCode FlashLog::readFromLog(void *buffer, bd_addr_t addr, bd_size_t size)
 	// copy epilogue data into buffer
 	bd_size_t epilogueLength = epilogueEnd - epilogueStart;
 
-	memcpy(reinterpret_cast<uint8_t *>(buffer) + nextByteIndex, temporaryBuffer, sizeRemaining);
+	memcpy(reinterpret_cast<uint8_t *>(buffer) + nextByteIndex, readBuffer, sizeRemaining);
 	sizeRemaining -= epilogueLength;
 
 	MBED_ASSERT(sizeRemaining == 0);
@@ -534,10 +531,8 @@ bool FlashLog::tailDescribesValidPacket(struct packet_tail * checkingTail, bd_ad
         }
 
         // finally check checksum (which requires reading the whole packet)
-        char* packetBuffer[MAX_PACKET_LEN];
-
-        readFromLog(packetBuffer, packetStartAddr, packetLength);
-        checksum_t packetChecksum = calculateChecksum(packetLength, packetBuffer);
+        readFromLog(scratchBuffer, packetStartAddr, packetLength);
+        checksum_t packetChecksum = calculateChecksum(packetLength, scratchBuffer);
         if(packetChecksum != checkingTail->checksum)
         {
 #ifdef FL_DEBUG
@@ -764,9 +759,8 @@ int FlashLog::writePacket(uint8_t type, void *packet, ptimer_t pwr_ctr, ptimer_t
 int FlashLog::wipeLog(bool complete)
 {
 #if !FL_IS_SPI_FLASH
-    // buffer that only contains 0xFF to program the log with
-    static uint8_t eraseBuffer[FL_MAX_BLOCK_SIZE];
-    memset(eraseBuffer, 0xFF, blockSize);
+    // set scratch buffer to 0xFF to program the log with
+    memset(scratchBuffer, 0xFF, blockSize);
 #endif
 
     int err=0;
@@ -797,7 +791,7 @@ int FlashLog::wipeLog(bool complete)
 #if FL_IS_SPI_FLASH
 		err = sdBlockDev.erase(addr, eraseBlockSize);
 #else
-		err = sdBlockDev.program(eraseBuffer, addr, blockSize);
+		err = sdBlockDev.program(scratchBuffer, addr, blockSize);
 #endif
 
 		// make sure watchdog doesn't time out while we are erasing
