@@ -65,7 +65,7 @@ std::pair<bd_error, FLResultCode> FlashLog::initLog() {
 	logEnd = sdBlockDev.size() / FL_SIZE_DIVISOR;
 
 #if !FL_IS_SPI_FLASH
-	if(sdBlockDev.get_program_size() == sdBlockDev.get_read_size() || sdBlockDev.get_program_size() == sdBlockDev.get_erase_size())
+	if(sdBlockDev.get_program_size() != sdBlockDev.get_read_size() || sdBlockDev.get_program_size() != sdBlockDev.get_erase_size())
 	{
 		pc.printf("[FlashLog] Error: Program, erase, and read sizes of the memory must be equal in SD card mode\r\n");
 	}
@@ -130,14 +130,12 @@ bool FlashLog::logExists(FLResultCode *err) {
  @return     error
 */
 FLResultCode FlashLog::findLastPacket() {
-    FLResultCode err = FL_SUCCESS;
-    bd_addr_t start=logStart, end=logEnd, middle;
-
     // If the block size is > 2*max, then we need to search based on that in order to handle blanks of up to SD_BLOCK_SIZE - 1
     // Otherwise, needs to be 2*max rounded up to the nearest block for when we find the END of the last packet.
 	const size_t searchBlockSize = (MAX_PACKET_LEN + blockSize - 1)/blockSize * blockSize;
 
-	const size_t blockBufferSize = (MAX_PACKET_LEN + FL_MAX_BLOCK_SIZE - 1)/FL_MAX_BLOCK_SIZE * FL_MAX_BLOCK_SIZE + MAX_PACKET_LEN;
+    FLResultCode err = FL_SUCCESS;
+    bd_addr_t start=logStart, end=logEnd, middle=logEnd - searchBlockSize;
 
 	MBED_ASSERT(end - start >= 2 * searchBlockSize); // make sure that the loop is actually entered
 
@@ -245,6 +243,11 @@ FLResultCode FlashLog::findLastPacket() {
 
     //finally, use the found tail to populate the class data members.
     nextPacketAddr = lastDirtyByte + 1;
+
+    // TODO test with invalid tail
+    cacheRealWriteStartAddr = nextPacketAddr; // resuming from old log
+    cacheBlockAddress = roundUpToNearestBlock(nextPacketAddr);
+
     //if this isn't a valid tail, write a valid tail marking this as an invalid packet and continue
     if (tailValid) 
     {
@@ -282,6 +285,9 @@ int FlashLog::writeToLog(const void *buffer, bd_addr_t addr, bd_size_t size)
     {
         flashlogTimer.start();
         firstWriteToLog = false;
+
+        // yes, this can underflow, but writeCacheValid should be false, so this will return to 0/desired value
+        cacheBlockAddress -= blockSize;
     }
 
     // TODO proper error handling. This just returns *last* error, not
@@ -293,56 +299,55 @@ int FlashLog::writeToLog(const void *buffer, bd_addr_t addr, bd_size_t size)
     if(writeCacheValid)
 	{
 		// appending to buffer
-		writeStartOffset = addr - lastCacheWriteAddr;
+		writeStartOffset = addr - cacheRealWriteStartAddr;
 	}
     else
 	{
 		writeStartOffset = 0;
 
 		// this is first write to buffer
-		cacheBlockAddress = addr;
+		cacheBlockAddress += blockSize;
+        cacheRealWriteStartAddr = addr;
 	}
 
     int err = 0;
 
-	lastCacheWriteAddr = addr; // start of next "previous" write
-
     if(writeStartOffset >= blockSize)
     {
         // if the next write is after the end of the block, flush current block,
-        // set firstWritePosition, and follow logic as expected
+        // set cacheBlockAddress, and follow logic as expected
         err = sdBlockDev.program(writeCache, cacheBlockAddress, blockSize);
 
         clearWriteCache();
         flashlogTimer.reset();
 
-		cacheBlockAddress = addr;
-		lastCacheWriteAddr = cacheBlockAddress;
-		writeStartOffset = 0;
-		writeCacheValid = true;
+        cacheBlockAddress += blockSize;
+        cacheRealWriteStartAddr = addr;
+        writeStartOffset = 0;
+        writeCacheValid = true;
     }
 
     if(size + writeStartOffset >= blockSize)
     {
+        // space left in first block availble to write to
         bd_size_t firstWriteLeftover = blockSize - writeStartOffset;
-        // write current temporary buffer and maximum leftover size
+        // write current cache and fill leftover size
         memcpy(&writeCache[writeStartOffset], buffer, firstWriteLeftover);
         err = sdBlockDev.program(writeCache, cacheBlockAddress, blockSize);
 
-		cacheBlockAddress = addr + firstWriteLeftover;
+		cacheBlockAddress += blockSize;
 
-        bd_size_t leftoverSize = size - (firstWriteLeftover);
+        bd_size_t leftoverSize = size - firstWriteLeftover;
         while(leftoverSize > blockSize)
         {
             // writes in chunks of SD_BLOCK_SIZE bytes
-            err = sdBlockDev.program((uint8_t *)(&buffer)[firstWriteLeftover],
+            err = sdBlockDev.program(&(reinterpret_cast<const uint8_t *>(buffer)[firstWriteLeftover]),
 									 cacheBlockAddress, blockSize);
 			cacheBlockAddress += blockSize;
-			writeStartOffset -= blockSize;
+			firstWriteLeftover += blockSize;
             leftoverSize -= blockSize;
         }
 
-		lastCacheWriteAddr = UINT64_MAX; // next write is at start of buffer
         flashlogTimer.reset();
 
         clearWriteCache();
@@ -350,9 +355,8 @@ int FlashLog::writeToLog(const void *buffer, bd_addr_t addr, bd_size_t size)
         if(leftoverSize > 0)
         {
             // start new writeCache
-            cacheBlockAddress = addr + size - leftoverSize;
-			lastCacheWriteAddr = cacheBlockAddress;
-            memcpy(&writeCache[0], (uint8_t *)(&buffer)[size - leftoverSize],
+            cacheBlockAddress += blockSize;
+            memcpy(&writeCache[cacheBlockAddress - (addr + size - leftoverSize)], &(reinterpret_cast<const uint8_t *>(buffer)[size - leftoverSize]),
 				   leftoverSize);
             writeCacheValid = true;
         }
@@ -360,9 +364,10 @@ int FlashLog::writeToLog(const void *buffer, bd_addr_t addr, bd_size_t size)
     else
     {
         memcpy(&writeCache[writeStartOffset], buffer, size);
+        writeCacheValid = true;
     }
 
-    if(flashlogTimer.elapsed_time() > 100ms)
+    if(writeCacheValid && flashlogTimer.elapsed_time() > 100ms)
     {
     	// Flush write cache to chip
         err = sdBlockDev.program(writeCache, cacheBlockAddress, blockSize);
@@ -809,6 +814,12 @@ int FlashLog::wipeLog(bool complete)
 
 	// remove any data that may have been in the write cache
 	clearWriteCache();
+
+    cacheBlockAddress = logStart;
+    cacheRealWriteStartAddr = logStart;
+    firstWriteToLog = true;
+    writeCacheValid = false;
+    flashlogTimer.stop();
     
     return err;
 }
@@ -854,7 +865,7 @@ FLResultCode FlashLog::binaryDumpReverseIterator(struct log_binary_dump_frame *f
     {
         return FL_ITERATION_DONE;
     }
-	else if(nextReadAddrReverse - frame_len <= logStart)
+	else if(nextReadAddrReverse <= logStart + frame_len)
 	{
         //not enough data to fill the full frame. will fill it partially
         readFromLog(frame->bytes + frame_len - nextReadAddrReverse, logStart, nextReadAddrReverse);

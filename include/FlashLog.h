@@ -344,10 +344,8 @@ protected:
     // If false, no cache data is valid.
     bool writeCacheValid = false;
 
-    // Flash address of the last write to get difference for positioning inside
-    // timeoutBuffer
-    bd_addr_t lastCacheWriteAddr;
-
+    // this is the address to compare new addresses to to see their offset 
+    bd_addr_t cacheRealWriteStartAddr;
 
     bd_addr_t cacheBlockAddress = 0; // Sector address that the writeCache currently is caching
 
