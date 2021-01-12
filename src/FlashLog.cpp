@@ -199,7 +199,6 @@ FLResultCode FlashLog::findLastPacket() {
 	}
 
 #ifdef FL_DEBUG
-	readFromLog(scratchBuffer, finalRegionStart, finalRegionSize);
 	pc.printf("discovered end of logfile near %016" PRIX64 ". Final packet must exist somewhere in this region:\r\n", start);
     PRETTYPRINT_BYTES(scratchBuffer, finalRegionSize, finalRegionStart);
 #endif
@@ -281,6 +280,10 @@ int FlashLog::writeToLog(const void *buffer, bd_addr_t addr, bd_size_t size)
 		return sdBlockDev.program(buffer, addr, size);
 	}
 
+#ifdef FL_DEBUG
+	pc.printf("[writeToLog()] Called to program 0x%" PRIx64 " bytes starting at addr 0x%" PRIx64 "\r\n", size, addr);
+#endif
+
     if(firstWriteToLog)
     {
         flashlogTimer.start();
@@ -316,6 +319,10 @@ int FlashLog::writeToLog(const void *buffer, bd_addr_t addr, bd_size_t size)
     {
         // if the next write is after the end of the block, flush current block,
         // set cacheBlockAddress, and follow logic as expected
+#ifdef FL_DEBUG
+		pc.printf("[writeToLog()] Programming to 0x%" PRIx64 ": ", cacheBlockAddress);
+		PRETTYPRINT_BYTES(writeCache, blockSize, cacheBlockAddress);
+#endif
         err = sdBlockDev.program(writeCache, cacheBlockAddress, blockSize);
 
         clearWriteCache();
@@ -333,6 +340,11 @@ int FlashLog::writeToLog(const void *buffer, bd_addr_t addr, bd_size_t size)
         bd_size_t firstWriteLeftover = blockSize - writeStartOffset;
         // write current cache and fill leftover size
         memcpy(&writeCache[writeStartOffset], buffer, firstWriteLeftover);
+
+#ifdef FL_DEBUG
+		pc.printf("[writeToLog()] Programming to 0x%" PRIx64 ": ", cacheBlockAddress);
+		PRETTYPRINT_BYTES(writeCache, blockSize, cacheBlockAddress);
+#endif
         err = sdBlockDev.program(writeCache, cacheBlockAddress, blockSize);
 
 		cacheBlockAddress += blockSize;
@@ -341,6 +353,10 @@ int FlashLog::writeToLog(const void *buffer, bd_addr_t addr, bd_size_t size)
         while(leftoverSize > blockSize)
         {
             // writes in chunks of SD_BLOCK_SIZE bytes
+#ifdef FL_DEBUG
+			pc.printf("[writeToLog()] Programming to 0x%" PRIx64 ": ", cacheBlockAddress);
+			PRETTYPRINT_BYTES(&(reinterpret_cast<const uint8_t *>(buffer)[firstWriteLeftover]), blockSize, cacheBlockAddress);
+#endif
             err = sdBlockDev.program(&(reinterpret_cast<const uint8_t *>(buffer)[firstWriteLeftover]),
 									 cacheBlockAddress, blockSize);
 			cacheBlockAddress += blockSize;
@@ -367,9 +383,13 @@ int FlashLog::writeToLog(const void *buffer, bd_addr_t addr, bd_size_t size)
         writeCacheValid = true;
     }
 
-    if(writeCacheValid && flashlogTimer.elapsed_time() > 100ms)
+    if(writeCacheValid && flashlogTimer.elapsed_time() > 10s)
     {
     	// Flush write cache to chip
+#ifdef FL_DEBUG
+		pc.printf("[writeToLog()] Flushing cache: programming to 0x%" PRIx64 ": ", cacheBlockAddress);
+		PRETTYPRINT_BYTES(writeCache, blockSize, cacheBlockAddress);
+#endif
         err = sdBlockDev.program(writeCache, cacheBlockAddress, blockSize);
 
         flashlogTimer.reset();
@@ -787,7 +807,7 @@ int FlashLog::wipeLog(bool complete)
 
         // Print progress if process has advanced at least 0.01%
         float progress = ( (float) addr / (getLogCapacity()))*100;
-        if(progress - prevProgress > .01f)
+        if(progress - prevProgress > .1f)
 		{
         	prevProgress = progress;
 			pc.printf("(%.02f%%)\r\n", progress);
@@ -820,6 +840,7 @@ int FlashLog::wipeLog(bool complete)
     firstWriteToLog = true;
     writeCacheValid = false;
     flashlogTimer.stop();
+    flashlogTimer.reset();
     
     return err;
 }

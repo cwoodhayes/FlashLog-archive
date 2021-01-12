@@ -60,6 +60,13 @@ int FlashLogHarness::test_chip_write_pattern()
     return write_pattern(PATTERN, logStart, logEnd);
 }
 
+int FlashLogHarness::test_chip_write_pattern_through_log()
+{
+	pc.printf("Starting to write pattern...\r\n");
+	return write_pattern_through_flashlog(PATTERN, logStart, logEnd);
+}
+
+
 int FlashLogHarness::test_chip_check_pattern()
 {
     pc.printf("Starting to check pattern...\r\n");
@@ -432,6 +439,58 @@ int FlashLogHarness::write_pattern(uint32_t pattern, bd_addr_t start_addr, bd_si
     return 0;
 }
 
+int FlashLogHarness::write_pattern_through_flashlog(uint32_t pattern, const bd_addr_t start_addr, const bd_size_t len)
+{
+	const bd_size_t writeBlockSize = 2 * blockSize;
+
+	static uint32_t buf[(2*FL_MAX_BLOCK_SIZE) / 4]; // divide byte block size by 4 because buffer is 32 bit ints
+	//fill the buf with the repeating pattern
+	for (bd_size_t i=0; i<writeBlockSize / 4; i++)
+	{
+		buf[i] = pattern;
+	}
+
+	//write the buf to the memory over and over. Writes big chunks to minimize use of the SPI line.
+	//rounds down the len to align with the nearest 0x100'th byte
+	bd_size_t num_steps = len / blockSize;
+	uint32_t print_threshold = num_steps / 100;
+	bd_addr_t cur_step = 0;
+
+	// current size of the individual block being programmed.
+	// Changes over the course of the test.
+	bd_size_t programBlockSize = sizeof(uint32_t);
+
+	for (bd_addr_t i = start_addr; i < start_addr + len;)
+	{
+		// reduce the size of this program if we are near the end of the programming operation
+		bd_addr_t nextStartAddr = i + programBlockSize;
+		if(nextStartAddr > start_addr + len)
+		{
+			nextStartAddr = start_addr + len;
+		}
+
+		//write 256 bytes in a chunk
+		int err = writeToLog(buf, i, (nextStartAddr - i));
+		if (err)
+		{
+			pc.printf("Write error at 0x%08" PRIX64 ".\r\n", i);
+			return -1;
+		}
+
+		i = nextStartAddr;
+
+		//update a status bar every now and again
+		if (++cur_step % print_threshold == 0)
+		{
+			pc.printf("(%.3f%%)\r\n", static_cast<float>(i - start_addr)/static_cast<float>(len)*100);
+		}
+
+		// change block size (increment or reset)
+		programBlockSize = (programBlockSize % writeBlockSize) + sizeof(uint32_t);
+	}
+	return 0;
+}
+
 int FlashLogHarness::check_pattern(uint32_t pattern, bd_addr_t start_addr, bd_size_t len)
 {
     static char buf[FL_MAX_BLOCK_SIZE];
@@ -551,7 +610,8 @@ int flash_test_main()
         pcStream.printf("11. Wipe Log\r\n");
         pcStream.printf("12. Dump Hex Data\r\n");
         pcStream.printf("13. Dump Binary Data\r\n");
-        pcStream.printf("15. Test checksum\r\n");
+		pcStream.printf("14. Chip Write Pattern through Log\r\n");
+		pcStream.printf("15. Test checksum\r\n");
         pcStream.printf("16. Check Erase\r\n");
         pcStream.printf("17. Write at Large Address\r\n");
         pcStream.printf("18. Bulk Erase\r\n");
@@ -576,6 +636,7 @@ int flash_test_main()
             case 11:        harness.test_wipe_log();                      break;
             case 12:        harness.test_dump_hex();                      break;
             case 13:        harness.test_dump_binary(pcStream);                 break;
+            case 14: 		harness.test_chip_write_pattern_through_log();break;
             case 15:        harness.test_checksum();                      break;
             case 16:        harness.test_check_erase();                   break;
             case 17:        harness.test_writeAtLargeAddress();           break;

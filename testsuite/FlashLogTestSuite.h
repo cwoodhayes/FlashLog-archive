@@ -20,12 +20,18 @@ class FlashLogHarness : public FlashLog
 		int test_chip_erase();
 
 		/**
-		 * @brief      Write a pattern across the chip, then confirm that it
-		 * was written by reading the entire chip
+		 * @brief      Write a pattern across the chip using the block device itself
 		 *
 		 * @return     error
 		 */
 		int test_chip_write_pattern();
+
+		/**
+		* @brief      Write a pattern across the chip using writeToLog()
+		*
+		* @return     error
+		*/
+		int test_chip_write_pattern_through_log();
 
 		/**
 		 * @brief      Confirm that the pattern written in write_pattern was indeed
@@ -184,6 +190,17 @@ class FlashLogHarness : public FlashLog
 		 * @return     err
 		 */
 		int write_pattern(uint32_t pattern, bd_addr_t start_addr, bd_size_t len);
+
+		/**
+		* @brief      Writes a pattern using FlashLog
+		*
+		* @param[in]  pattern  32-bit pattern to write
+		* @param[in]  addr     The address at which we'll start writing the pattern
+		* @param[in]  len      The length of memory across which to write the pattern, in bytes
+		*
+		* @return     err
+		*/
+		int write_pattern_through_flashlog(uint32_t pattern, bd_addr_t start_addr, bd_size_t len);
 
 		/**
 		 * @brief      Checks that a pattern has been correctly written across the memory
