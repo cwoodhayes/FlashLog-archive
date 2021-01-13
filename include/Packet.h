@@ -21,8 +21,7 @@
  * 3. Add a new struct for your packet below.  Make sure to make the last member "struct packet_tail tail".
  * 4. Add a new case for your packet in printPacket() in Packet.cpp
  * 5. Add a new case for your packet in the switch statement in getPacketLen() in Packet.cpp
- * 6. Add a new case which calls your print macro in test_chip_iterate_packets() in the FlashLog test suite.
- * 7. If the new packet is longer than MAX_PACKET_LEN, increase MAX_PACKET_LEN
+ * 6. If the new packet is longer than MAX_PACKET_LEN, increase MAX_PACKET_LEN
  */
 
 //Log data types
@@ -36,7 +35,8 @@
 #define LOG_INVALID 0x07
 #define LOG_POWER 0x08
 #define LOG_ADIS  0x09
-#define LOG_END_TYPEID 0xA
+#define LOG_RANGEFINDER  0x0A
+#define LOG_END_TYPEID 0xB
 
 
 #define LOG_PACKET_MAGIC1 0xAAAA
@@ -225,7 +225,14 @@ struct log_packet_adis {
 	struct packet_tail tail;
 };
 
-
+struct log_packet_rangefinder
+{
+	double distance; // 8 bytes
+	float rssi; // 4 byte
+	uint8_t linkQual; // 1 byte
+	// 3 bytes pad waste
+	struct packet_tail tail;
+};
 
 /*	Logs nothing--exists to pad the end of a block
 		Size: 1 byte

@@ -21,6 +21,7 @@ size_t getPacketLen(uint8_t type) {
 		case LOG_BARO:         return sizeof(struct log_packet_baro);
 		case LOG_POWER:        return sizeof(struct log_packet_power);
 		case LOG_ADIS:        return sizeof(struct log_packet_adis);
+		case LOG_RANGEFINDER: return sizeof(struct log_packet_rangefinder);
 		default:
 			return 0;
 	}
@@ -111,6 +112,14 @@ void printPacket(void const * packetBytes, uint8_t packetType, Stream & pc)
 			pc.printf("gyroX=%.02f\tgyroY=%.02f\tgyroZ=%.02f\r\naccelX=%.02f\taccelY=%.02f\taccelZ=%.02f\r\n",
 			 	lpadis->gyroX, lpadis->gyroY, lpadis->gyroZ, lpadis->accelX, lpadis->accelY, lpadis->accelZ);
 			printPacketTail(&lpadis->tail, pc);
+		}
+		break;
+		case LOG_RANGEFINDER:
+		{
+			auto lprange = reinterpret_cast<struct log_packet_rangefinder const *>(packetBytes);
+			pc.printf("distance=%.02f\trssi=%.01f\tlqi=%" PRIi8 "\r\n",
+					  lprange->distance, lprange->rssi, lprange->linkQual);
+			printPacketTail(&lprange->tail, pc);
 		}
 		break;
 		default:
