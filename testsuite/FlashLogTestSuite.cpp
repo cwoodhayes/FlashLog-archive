@@ -350,10 +350,15 @@ int FlashLogHarness::test_dump_hex()
     return 0;
 }
 
+struct log_binary_dump_frame frame;
 int FlashLogHarness::test_dump_binary(Stream &pc)
 {
+	serial.set_baud(921600);
+
+	// Give the PC time to switch its baudrate
+	ThisThread::sleep_for(100ms);
+
     pc.printf("Dumping entirety of log into binary...\r\n<bindump>\r\n");
-    struct log_binary_dump_frame frame;
     FLASHLOG_BINARY_ITERATE(this, frame)
     {
        for (size_t i=0; i<sizeof(log_binary_dump_frame); i++)
@@ -362,7 +367,8 @@ int FlashLogHarness::test_dump_binary(Stream &pc)
        } 
     }
     pc.printf("</bindump>\r\n");
-    return 0;
+	serial.set_baud(115200);
+	return 0;
 }
 
 int FlashLogHarness::test_check_erase()

@@ -847,22 +847,36 @@ int FlashLog::wipeLog(bool complete)
 
 FLResultCode FlashLog::binaryDumpIterator(struct log_binary_dump_frame *frame, bool begin)
 {
-	// this code currently only works if the log size is an exact number of frames.
-	MBED_ASSERT(getLogCapacity() % sizeof(log_binary_dump_frame) == 0);
+	static bd_addr_t nextReadAddr=logStart; // Address where the next read will start
 
-    static bd_addr_t nextReadAddr=logStart;
     //begin a new iteration?
     if (begin)
     {
         nextReadAddr = logStart;
     }
     //check if we're about to read over the end of the log
-    if (nextReadAddr + sizeof(log_binary_dump_frame) > logEnd)
+    if (nextReadAddr >= nextPacketAddr)
     {
         return FL_ITERATION_DONE;
     }
-    //grab the next frame of data and return
-    readFromLog(frame, nextReadAddr, sizeof(log_binary_dump_frame));
+
+    if(nextReadAddr + sizeof(log_binary_dump_frame) > nextPacketAddr)
+	{
+    	// must truncate this read, would pass end of log
+    	bd_size_t readLen = nextPacketAddr - nextReadAddr;
+
+    	// read partial frame
+		readFromLog(frame, nextReadAddr, readLen);
+
+		// fill the rest of the frame with FFs
+		memset(&(frame->bytes[readLen]), 0xFF, sizeof(log_binary_dump_frame) - readLen);
+	}
+    else
+	{
+		//grab the next frame of data and return
+		readFromLog(frame, nextReadAddr, sizeof(log_binary_dump_frame));
+	}
+
     nextReadAddr += sizeof(log_binary_dump_frame);
     return FL_SUCCESS;
 }

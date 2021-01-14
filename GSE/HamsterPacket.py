@@ -15,7 +15,8 @@ packet_name = [
 	"BARO",
 	"INVALID",
 	"POWER",
-	"ADIS"
+	"ADIS",
+	"RANGEFINDER",
 ]
 
 #packet state list
@@ -56,8 +57,7 @@ COMPRESSED_BASE64_REV_CLOSE_TAG = '</compressed-base64-reverse>'
 BINARY_DUMP_FRAME_LEN = 0x100 #size of the Packet.h binary dump frame
 HEX_DUMP_FRAME_PRINT_TERMINATOR = '\r\n' #what's printed out after we print a dump frame
 
-# TODO not sure about endianness, so just try one and if
-# it doesn't work then switch it around
+# See here for an explanation of these struct.unpack strings: https://docs.python.org/3/library/struct.html#format-characters
 packet_format = [ # See Packet.h for these struct declarations
 	r'',		#this is an error. no real packet has typeID 0
 	r'<64s',	#text
@@ -68,7 +68,8 @@ packet_format = [ # See Packet.h for these struct declarations
 	r'<fifi',		#baro
 	r'',		#invalid
 	r'<f2Bhff', #power
-	r'<7fH2B'  #adis
+	r'<7fH2B',  #adis
+	r'<dfB3x' #rangefinder
 ]
 
 
@@ -159,6 +160,12 @@ adis_fields = [
 	"PAD", "PAD"
 ]
 
+rangefinder_fields = [
+	"distance",
+	"rssi",
+	"linkQual",
+]
+
 packet_fields = [
 	error_fields,
 	text_fields,
@@ -169,7 +176,8 @@ packet_fields = [
 	baro_fields,
 	invalid_fields,
 	power_fields,
-	adis_fields
+	adis_fields,
+	rangefinder_fields
 ]
 
 # other constants
