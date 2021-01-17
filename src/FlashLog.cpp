@@ -900,7 +900,7 @@ FLResultCode FlashLog::binaryDumpReverseIterator(struct log_binary_dump_frame *f
     	nextReadAddrReverse -= frame_len;
 
         //grab the next frame of data and return
-        readFromLog(frame, nextReadAddrReverse - frame_len, frame_len);
+        readFromLog(frame, nextReadAddrReverse, frame_len);
     }
 
     //reverse the log_binary_dump_frame
