@@ -12,10 +12,10 @@
 
 #include <string>
 
-BufferedSerial serial(USBTX, USBRX, 115200);
-SerialStream<BufferedSerial> pcStream(serial); // can't name it pc due to conflict with FlashLog class variable
+BufferedSerial pcSerial(USBTX, USBRX, 115200);
+SerialStream<BufferedSerial> pcStream(pcSerial); // can't name it pc due to conflict with FlashLog class variable
 
-BLOCK_DEVICE_CONSTRUCTOR
+BLOCK_DEVICE_CONSTRUCTOR(harnessBlockDev)
 
 /**
  * @brief      Constructs the object.
@@ -353,7 +353,7 @@ int FlashLogHarness::test_dump_hex()
 struct log_binary_dump_frame frame;
 int FlashLogHarness::test_dump_binary(Stream &pc)
 {
-	serial.set_baud(921600);
+	pcSerial.set_baud(921600);
 
 	// Give the PC time to switch its baudrate
 	ThisThread::sleep_for(100ms);
@@ -367,7 +367,7 @@ int FlashLogHarness::test_dump_binary(Stream &pc)
        } 
     }
     pc.printf("</bindump>\r\n");
-	serial.set_baud(115200);
+	pcSerial.set_baud(115200);
 	return 0;
 }
 
