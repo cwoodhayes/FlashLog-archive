@@ -20,7 +20,7 @@ set(TEST_FLASH_SOURCES
     testsuite/FlashLogTestSuite.cpp)
 
 add_library(flashlog STATIC ${FLASHLOG_SOURCES})
-target_link_libraries(flashlog mbed-os)
+target_link_libraries(flashlog mbed-os ${FLASHLOG_EXTRA_LIBS})
 target_include_directories(flashlog PUBLIC include)
 
 # disable warnings that aren't relevant here
