@@ -18,7 +18,7 @@
 
 FlashLog::FlashLog(BlockDevice & _blockDev, Stream & _pc):
 pc(_pc),
-sdBlockDev(_blockDev)
+blockDev(_blockDev)
 {
     logInitialized = false;
 
@@ -35,7 +35,7 @@ sdBlockDev(_blockDev)
 
 /* Destructor */
 FlashLog::~FlashLog() {
-    sdBlockDev.deinit();
+    blockDev.deinit();
 }
 
 /* Preps a new log by checking to make sure there's no log already written. If
@@ -47,7 +47,7 @@ FlashLog::~FlashLog() {
 */
 std::pair<bd_error, FLResultCode> FlashLog::initLog() {
 
-    bd_error blockDevErr = static_cast<bd_error>(sdBlockDev.init());
+    bd_error blockDevErr = static_cast<bd_error>(blockDev.init());
     if (blockDevErr)
     {
         pc.printf("[FlashLog] Error %d initializing device!", blockDevErr);
@@ -55,31 +55,32 @@ std::pair<bd_error, FLResultCode> FlashLog::initLog() {
     }
 
 #ifdef FL_DEBUG
-      pc.printf("block device size: 0x%" PRIX64 "\r\n",         sdBlockDev.size());
-      pc.printf("block device read size: 0x%" PRIX64 "\r\n",    sdBlockDev.get_read_size());
-      pc.printf("block device program size: 0x%" PRIX64 "\r\n", sdBlockDev.get_program_size());
-      pc.printf("block device erase size: 0x%" PRIX64 "\r\n",   sdBlockDev.get_erase_size());
+      pc.printf("block device size: 0x%" PRIX64 "\r\n",         blockDev.size());
+      pc.printf("block device read size: 0x%" PRIX64 "\r\n",    blockDev.get_read_size());
+      pc.printf("block device program size: 0x%" PRIX64 "\r\n", blockDev.get_program_size());
+      pc.printf("block device erase size: 0x%" PRIX64 "\r\n",   blockDev.get_erase_size());
 #endif
 
 	// detect log size from block device
-	logEnd = sdBlockDev.size() / FL_SIZE_DIVISOR;
+	logEnd = blockDev.size() / FlashLogConfig::sizeDivisor;
 
-#if !FL_IS_SPI_FLASH
-	if(sdBlockDev.get_program_size() != sdBlockDev.get_read_size() || sdBlockDev.get_program_size() != sdBlockDev.get_erase_size())
-	{
-		pc.printf("[FlashLog] Error: Program, erase, and read sizes of the memory must be equal in SD card mode\r\n");
-	}
-#endif
+    if(!FlashLogConfig::isSPIFlash)
+    {	
+        if(blockDev.get_program_size() != blockDev.get_read_size() || blockDev.get_program_size() != blockDev.get_erase_size())
+        {
+            pc.printf("[FlashLog] Error: Program, erase, and read sizes of the memory must be equal in SD card mode\r\n");
+        }
+    }
 
-	MBED_ASSERT(sdBlockDev.get_program_size() == sdBlockDev.get_read_size());
-	blockSize = sdBlockDev.get_program_size();
-	if(blockSize > FL_MAX_BLOCK_SIZE)
+	MBED_ASSERT(blockDev.get_program_size() == blockDev.get_read_size());
+	blockSize = blockDev.get_program_size();
+	if(blockSize > FlashLogConfig::maxBlockSize)
 	{
-		pc.printf("[FlashLog] Error: Not compiled with support for memory with block size %" PRIu64 ", please increase FL_MAX_BLOCK_SIZE\r\n", blockSize);
+		pc.printf("[FlashLog] Error: Not compiled with support for memory with block size %" PRIu64 ", please increase FlashLogConfig::maxBlockSize\r\n", blockSize);
 		return {BD_ERROR_OK, FL_ERROR_BD_PARAMS};
 	}
 
-	eraseBlockSize = sdBlockDev.get_erase_size();
+	eraseBlockSize = blockDev.get_erase_size();
 
 	FLResultCode err;
 
@@ -259,7 +260,7 @@ FLResultCode FlashLog::findLastPacket() {
         pc.printf ("invalid tail! Writing tail of type LOG_INVALID starting at 0x%016" PRIX64 ":\r\n", nextPacketAddr);
         //reuse the buffer tailp points to since its data is invalid anyhow
         struct packet_tail invalidTail = {};
-        populatePacketTail(LOG_INVALID, sizeof(struct packet_tail), &invalidTail, 0, 0, FL_INVALID_STATE);
+        populatePacketTail(LOG_INVALID, sizeof(struct packet_tail), &invalidTail, 0, 0, FlashLogConfig::invalidState);
         pc.printf("tail mbed addr: %p; flash addr: %016" PRIX64 "\r\n", &invalidTail, nextPacketAddr);
         pc.printf("Word of warning: This tail may look gross. But all that matters is magic and packet type. Tail:\r\n");
         PRINT_BYTES(&invalidTail, sizeof(struct packet_tail));
@@ -279,7 +280,7 @@ int FlashLog::writeToLog(const void *buffer, bd_addr_t addr, bd_size_t size)
 	if(blockSize == 1)
 	{
 		// byte addressable = easy-peasy
-		return sdBlockDev.program(buffer, addr, size);
+		return blockDev.program(buffer, addr, size);
 	}
 
 #ifdef FL_DEBUG
@@ -314,7 +315,7 @@ int FlashLog::writeToLog(const void *buffer, bd_addr_t addr, bd_size_t size)
 		pc.printf("[writeToLog(): o] Programming to 0x%" PRIx64 ": ", cacheBlockAddress);
 		PRETTYPRINT_BYTES(writeCache, blockSize, cacheBlockAddress);
 #endif
-        err = sdBlockDev.program(writeCache, cacheBlockAddress, blockSize);
+        err = blockDev.program(writeCache, cacheBlockAddress, blockSize);
 
         clearWriteCache();
         flashlogTimer.reset();
@@ -334,7 +335,7 @@ int FlashLog::writeToLog(const void *buffer, bd_addr_t addr, bd_size_t size)
 		pc.printf("[writeToLog(): s+o] Programming to 0x%" PRIx64 ": ", cacheBlockAddress);
 		PRETTYPRINT_BYTES(writeCache, blockSize, cacheBlockAddress);
 #endif
-        err = sdBlockDev.program(writeCache, cacheBlockAddress, blockSize);
+        err = blockDev.program(writeCache, cacheBlockAddress, blockSize);
 
 		cacheBlockAddress += blockSize;
 
@@ -346,7 +347,7 @@ int FlashLog::writeToLog(const void *buffer, bd_addr_t addr, bd_size_t size)
 			pc.printf("[writeToLog(): l] Programming to 0x%" PRIx64 ": ", cacheBlockAddress);
 			PRETTYPRINT_BYTES(&(reinterpret_cast<const uint8_t *>(buffer)[leftoverIndex]), blockSize, cacheBlockAddress);
 #endif
-            err = sdBlockDev.program(&(reinterpret_cast<const uint8_t *>(buffer)[leftoverIndex]),
+            err = blockDev.program(&(reinterpret_cast<const uint8_t *>(buffer)[leftoverIndex]),
 									 cacheBlockAddress, blockSize);
 			cacheBlockAddress += blockSize;
 			leftoverIndex += blockSize;
@@ -372,14 +373,14 @@ int FlashLog::writeToLog(const void *buffer, bd_addr_t addr, bd_size_t size)
         writeCacheValid = true;
     }
 
-    if(writeCacheValid && flashlogTimer.elapsed_time() > FL_CACHE_TIMEOUT)
+    if(writeCacheValid && (flashlogTimer.elapsed_time() > FlashLogConfig::cacheTimeout))
     {
     	// Flush write cache to chip
 #ifdef FL_DEBUG
 		pc.printf("[writeToLog()] Flushing cache: programming to 0x%" PRIx64 ": ", cacheBlockAddress);
 		PRETTYPRINT_BYTES(writeCache, blockSize, cacheBlockAddress);
 #endif
-        err = sdBlockDev.program(writeCache, cacheBlockAddress, blockSize);
+        err = blockDev.program(writeCache, cacheBlockAddress, blockSize);
 
         flashlogTimer.reset();
     }
@@ -389,8 +390,21 @@ int FlashLog::writeToLog(const void *buffer, bd_addr_t addr, bd_size_t size)
 
 FLResultCode FlashLog::readFromLog(void *buffer, bd_addr_t addr, bd_size_t size)
 {
-    static uint8_t readBuffer[FL_MAX_BLOCK_SIZE] = {0};
     int err = 0;
+    if(FlashLogConfig::isSPIFlash)
+    {
+        err = blockDev.read(buffer, addr, size);
+        if(err != BD_ERROR_OK)
+        {
+            return FL_ERROR_BD_IO;
+        }
+        else
+        {
+            return FL_SUCCESS;
+        }
+    }
+
+    static uint8_t readBuffer[FlashLogConfig::maxBlockSize] = {0};
     bd_size_t sizeRemaining = size;
     size_t nextByteIndex = 0; // next index to write to in the buffer
     const bd_addr_t readEnd = addr + size;
@@ -406,7 +420,7 @@ FLResultCode FlashLog::readFromLog(void *buffer, bd_addr_t addr, bd_size_t size)
 	else
 	{
 		// read block containing prologue
-		err = sdBlockDev.read(readBuffer, roundDownToNearestBlock(addr), blockSize);
+		err = blockDev.read(readBuffer, roundDownToNearestBlock(addr), blockSize);
 
 		if(err != BD_ERROR_OK)
 		{
@@ -444,7 +458,7 @@ FLResultCode FlashLog::readFromLog(void *buffer, bd_addr_t addr, bd_size_t size)
 		bd_size_t bodyLength = bodyEnd - bodyStart;
 
 		// read 'em!  Straight into the output buffer.
-		err = sdBlockDev.read(reinterpret_cast<uint8_t *>(buffer) + nextByteIndex, bodyStart, bodyLength);
+		err = blockDev.read(reinterpret_cast<uint8_t *>(buffer) + nextByteIndex, bodyStart, bodyLength);
 		if(err != BD_ERROR_OK)
 		{
 			return FL_ERROR_BD_IO;
@@ -472,7 +486,7 @@ FLResultCode FlashLog::readFromLog(void *buffer, bd_addr_t addr, bd_size_t size)
 	MBED_ASSERT(epilogueStart != epilogueEnd);
 
 	// read block containing epilogue
-	err = sdBlockDev.read(readBuffer, epilogueStart, blockSize);
+	err = blockDev.read(readBuffer, epilogueStart, blockSize);
 
 	if(err != BD_ERROR_OK)
 	{
@@ -570,7 +584,7 @@ FLResultCode FlashLog::readTailAt(bd_addr_t addr, struct packet_tail* buf){
 }
 
 
-FLResultCode FlashLog::restoreFSMState(FL_STATE_T *s, ptimer_t *pwr_ctr, ptimer_t *flight_ctr)
+FLResultCode FlashLog::restoreFSMState(FlashLogConfig::State_t *s, ptimer_t *pwr_ctr, ptimer_t *flight_ctr)
 {
     if (!logInitialized) {
         pc.printf("[FlashLog] ERROR: no init (restoreFSMState)\r\n");
@@ -602,7 +616,7 @@ FLResultCode FlashLog::restoreFSMState(FL_STATE_T *s, ptimer_t *pwr_ctr, ptimer_
         }
     }
 
-    if(!FL_IS_VALID_STATE(((FL_STATE_T) restorationTail->state)))
+    if(!(FlashLogConfig::isValidState(static_cast<FlashLogConfig::State_t>(restorationTail->state))))
 	{
     	// invalid state ID -- maybe data is from a different version of the application?
 		pc.printf("FATAL ERROR: Valid packet found but state %" PRIu8 " is not valid. \r\n", restorationTail->state);
@@ -614,7 +628,7 @@ FLResultCode FlashLog::restoreFSMState(FL_STATE_T *s, ptimer_t *pwr_ctr, ptimer_
     *flight_ctr = restorationTail->flight_ctr;
 
     // restore FSM state
-    *s = (FL_STATE_T) restorationTail->state;
+    *s = static_cast<FlashLogConfig::State_t>(restorationTail->state);
 
     return FL_SUCCESS;
 }
@@ -718,7 +732,7 @@ void FlashLog::printPacketsReport(const uint8_t NUM_PACKETS_TO_FIND){
     pc.printf("======================================\r\n\r\n");
 }
 
-int FlashLog::writePacket(uint8_t type, void *packet, ptimer_t pwr_ctr, ptimer_t flight_ctr, FL_STATE_T state) {
+int FlashLog::writePacket(uint8_t type, void *packet, ptimer_t pwr_ctr, ptimer_t flight_ctr, FlashLogConfig::State_t state) {
     if (!logInitialized) {
         pc.printf("[FlashLog] ERROR: no init (writePacket)\r\n");
         return FL_ERROR_LOGNOINIT;
@@ -744,7 +758,7 @@ int FlashLog::writePacket(uint8_t type, void *packet, ptimer_t pwr_ctr, ptimer_t
     PRINT_PACKET_BYTES(type, packet);
     pc.printf("Writing packet type %" PRIX8 " to 0x%016" PRIX64 "\r\n", type, nextPacketAddr);
     // pc.printf("Current Tail State: %d\r\n", packet.tail->state);
-    pc.printf("Current State: %s\r\n", FL_GET_STATE_NAME(state));
+    pc.printf("Current State: %s\r\n", FlashLogConfig::getStateName(state));
 #endif
 
     int err = writeToLog(packet, nextPacketAddr, len);
@@ -770,14 +784,14 @@ int FlashLog::writePacket(uint8_t type, void *packet, ptimer_t pwr_ctr, ptimer_t
 */
 int FlashLog::wipeLog(bool complete)
 {
-#if !FL_IS_SPI_FLASH
-    // set scratch buffer to 0xFF to program the log with
-    memset(scratchBuffer, 0xFF, blockSize);
-#endif
+    if(!FlashLogConfig::isSPIFlash)
+    {    // set scratch buffer to 0xFF to program the log with
+        memset(scratchBuffer, 0xFF, blockSize);
+    }
 
     int err=0;
     // hopefully the block device size is always a clean multiple of the sector size
-    MBED_ASSERT(sdBlockDev.size() % blockSize == 0);
+    MBED_ASSERT(blockDev.size() % blockSize == 0);
 
     //get the flash block size--the smallest chunk of memory that can be independentyl erased
     size_t lastPacketAddress = nextPacketAddr;
@@ -800,13 +814,16 @@ int FlashLog::wipeLog(bool complete)
 			pc.printf("(%.02f%%)\r\n", progress);
 		}
 
-#if FL_IS_SPI_FLASH
-		err = sdBlockDev.erase(addr, eraseBlockSize);
-#else
-		err = sdBlockDev.program(scratchBuffer, addr, blockSize);
-#endif
+        if(FlashLogConfig::isSPIFlash)
+        {
+            err = blockDev.erase(addr, eraseBlockSize);
+        }
+        else
+        {
+            err = blockDev.program(scratchBuffer, addr, blockSize);
+        }
 
-		// make sure watchdog doesn't time out while we are erasing
+        // make sure watchdog doesn't time out while we are erasing
         Watchdog::get_instance().kick();
     }
     pc.printf("[FlashLog] Erase finished!\r\n");
@@ -1196,7 +1213,7 @@ void *FlashLog::tailToPacket(struct packet_tail* tail) {
  * @param[in]  len     The length
  * @param      packet  The packet
  */
-void FlashLog::populatePacketTail(uint8_t type, size_t len, void *packet, ptimer_t pwr_ctr, ptimer_t flight_ctr, FL_STATE_T state) {
+void FlashLog::populatePacketTail(uint8_t type, size_t len, void *packet, ptimer_t pwr_ctr, ptimer_t flight_ctr, FlashLogConfig::State_t state) {
     //get a pointer to the packet's tail
     struct packet_tail *tail = (struct packet_tail*) (((ptrdiff_t) packet + len) - (int) sizeof(struct packet_tail));
     //populate the tail
@@ -1299,10 +1316,10 @@ int FlashLog::findTailInBuffer(uint8_t *buf, size_t len, bool reverse) {
           return i;
       }
     }
-    #ifdef FL_DEBUG
+#ifdef FL_DEBUG
     pc.printf("Tail not found in buffer:\r\n");
     PRINT_BYTES(buf, len);
-    #endif
+#endif
     return -1;
 }
 
@@ -1323,6 +1340,3 @@ bool isTail(void *buf) {
     struct packet_tail *tailp = (struct packet_tail *) buf;
     return tailp->magic1 == LOG_PACKET_MAGIC1 && tailp->magic2 == LOG_PACKET_MAGIC2 && tailp->magic3 == LOG_PACKET_MAGIC3;
 }
-
-
-

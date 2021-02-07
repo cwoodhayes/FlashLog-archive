@@ -151,7 +151,7 @@ class FlashLogHarness : public FlashLog
 		/* Global variables for use in all test functions: */
 		Timer flightTimer;
 		Timer powerTimer;
-		FL_STATE_T fsmState = FL_HARNESS_EXAMPLE_STATE;
+		FlashLogConfig::State_t fsmState = FlashLogConfig::harnessExampleState;
 
 		// Offsets to store restored timer values
 		ptimer_t powerTimerOffset = 0;

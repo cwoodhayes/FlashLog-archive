@@ -120,7 +120,7 @@ public:
 	 *
 	 * @return     SUCCESS, or an ERROR 
 	 */
-	FLResultCode restoreFSMState(FL_STATE_T *s, ptimer_t *pwr_ctr, ptimer_t *flight_ctr);
+	FLResultCode restoreFSMState(FlashLogConfig::State_t *s, ptimer_t *pwr_ctr, ptimer_t *flight_ctr);
 
 	/**
 	 * @brief      Writes a packet to the log
@@ -133,7 +133,7 @@ public:
 	 *
 	 * @return     { description_of_the_return_value }
 	 */
-	int writePacket(uint8_t type, void *packet, ptimer_t pwr_ctr, ptimer_t flight_ctr, FL_STATE_T state);
+	int writePacket(uint8_t type, void *packet, ptimer_t pwr_ctr, ptimer_t flight_ctr, FlashLogConfig::State_t state);
 
 	/**
 	 * @brief      Erase the contents of the log
@@ -318,7 +318,7 @@ protected:
     /**
      * The flash chip is a block device, and FlashLog is built on top of the block device
      */
-	BlockDevice & sdBlockDev;
+	BlockDevice & blockDev;
 
 	// The addresses that the FlashLog runs between on the flash device
 	bd_addr_t logStart;
@@ -338,7 +338,7 @@ protected:
     int packetsWritten;		//this is wrong after a brownout, so don't depend on it
 
     // buffer that fills before timeout to allow writing in blocks
-    uint8_t writeCache[FL_MAX_BLOCK_SIZE];
+    uint8_t writeCache[FlashLogConfig::maxBlockSize];
 
     // true if a block is currently being cached in the write cache.
     // If false, no cache data is valid.
@@ -349,7 +349,7 @@ protected:
     bool firstWriteToLog = true;
 
 	// Buffer needs to be allocated as the max possible searchBlockSize, plus one extra MAX_PACKET_LEN
-#define BINARY_SEARCH_BUFFER_SIZE ((MAX_PACKET_LEN + FL_MAX_BLOCK_SIZE - 1)/FL_MAX_BLOCK_SIZE * FL_MAX_BLOCK_SIZE + MAX_PACKET_LEN)
+#define BINARY_SEARCH_BUFFER_SIZE ((MAX_PACKET_LEN + FlashLogConfig::maxBlockSize - 1)/FlashLogConfig::maxBlockSize * FlashLogConfig::maxBlockSize + MAX_PACKET_LEN)
 
 	/**
 	 * The scratch buffer is used by a number of different functions that need scratch space.
@@ -362,7 +362,7 @@ protected:
      * - wipeLog()
      * - tailDescribesValidPacket()
 	 */
-	uint8_t scratchBuffer[std::max(static_cast<bd_addr_t>(BINARY_SEARCH_BUFFER_SIZE), static_cast<bd_addr_t>(FL_MAX_BLOCK_SIZE))];
+    uint8_t scratchBuffer[BINARY_SEARCH_BUFFER_SIZE > FlashLogConfig::maxBlockSize ? BINARY_SEARCH_BUFFER_SIZE : FlashLogConfig::maxBlockSize];
 
 	/** Returns true if a log already exists on the chip.
 
@@ -389,7 +389,7 @@ protected:
 	 * @param[in]  len     The packet length
 	 * @param      packet  A buffer containing the packet
 	 */
-	void populatePacketTail(uint8_t type, size_t len, void *packet, ptimer_t pwr_ctr, ptimer_t flight_ctr, FL_STATE_T state);
+	void populatePacketTail(uint8_t type, size_t len, void *packet, ptimer_t pwr_ctr, ptimer_t flight_ctr, FlashLogConfig::State_t state);
 
 	/**
 	 * @brief      Calculates the checksum for a given packet
@@ -442,4 +442,3 @@ protected:
 };
 
 #endif 
-

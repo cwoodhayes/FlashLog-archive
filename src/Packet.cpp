@@ -30,9 +30,9 @@ size_t getPacketLen(uint8_t type) {
 void printPacketTail(struct packet_tail const * tail, Stream & pc)
 {
 	char const * stateName;
-	if(FL_IS_VALID_STATE(static_cast<FL_STATE_T>(tail->state)))
+	if(FlashLogConfig::isValidState(static_cast<FlashLogConfig::State_t>(tail->state)))
 	{
-		stateName = FL_GET_STATE_NAME(static_cast<FL_STATE_T>(tail->state));
+        stateName = FlashLogConfig::getStateName(static_cast<FlashLogConfig::State_t>(tail->state));
 	}
 	else
 	{

@@ -15,18 +15,18 @@
 BufferedSerial pcSerial(USBTX, USBRX, 115200);
 SerialStream<BufferedSerial> pcStream(pcSerial); // can't name it pc due to conflict with FlashLog class variable
 
-BLOCK_DEVICE_CONSTRUCTOR(harnessBlockDev)
+std::unique_ptr<FlashLogConfig::BlockDevice_t> harnessBlockDev = FlashLogConfig::constructBlockDevice();
 
 /**
  * @brief      Constructs the object.
  */
 FlashLogHarness::FlashLogHarness() :
-FlashLog(harnessBlockDev, pcStream)
+FlashLog(*harnessBlockDev, pcStream)
 {
     startTimers();
 
     // init block device now so
-    int err = harnessBlockDev.init();
+    int err = harnessBlockDev->init();
     if(err != BD_ERROR_OK)
 	{
     	pc.printf("Failed to init block device, reports error %d\r\n", err);
@@ -39,7 +39,7 @@ int FlashLogHarness::test_chip_erase()
     int err;
 
     pc.printf("Chip initialized. Erasing\r\n");
-    err = sdBlockDev.erase(logStart, logEnd);
+    err = harnessBlockDev->erase(logStart, logEnd);
     if(err)
     {
         pc.printf("erase error %d\r\n", err);
@@ -123,7 +123,7 @@ int FlashLogHarness::test_chip_read_packets()
     for (bd_size_t i=0; i<i_max; i++) {       //TODO restore to i_max
         type = TP_LIST_TYPES[i % TP_LIST_SIZE];
         len = getPacketLen(type);
-        err = sdBlockDev.read(buf, addr, len);
+        err = harnessBlockDev->read(buf, addr, len);
         if (err)
         {
             return err;
@@ -239,7 +239,7 @@ int FlashLogHarness::test_write_bad_packet()
         }
         else
 		{
-			pc.printf("Log restored state as powerTimer=%" PRIu64 ", flightTimer=%" PRIu64 ", state=%s\r\n", restoredPowerTimer, restoredFlightTimer, FL_GET_STATE_NAME(fsmState));
+			pc.printf("Log restored state as powerTimer=%" PRIu64 ", flightTimer=%" PRIu64 ", state=%s\r\n", restoredPowerTimer, restoredFlightTimer, FlashLogConfig::getStateName(fsmState));
 		}
     }
     else if (err.second == FL_ERROR_BD_INIT)
@@ -252,7 +252,7 @@ int FlashLogHarness::test_write_bad_packet()
         pc.printf("Log empty.\r\n");
     }
     //write a packet that's 1 byte short to simulate a sudden power loss
-    sdBlockDev.program(&tp_text, nextPacketAddr, sizeof(tp_text) - 1);
+    harnessBlockDev->program(&tp_text, nextPacketAddr, sizeof(tp_text) - 1);
     printLastNBytes(0x100, 0x70);
     pc.printf("Packet partially written. Please power cycle and run brownout_recovery test\r\n");
     return 0;
@@ -267,10 +267,10 @@ int FlashLogHarness::test_brownout_recovery()
 	std::pair<bd_error, FLResultCode> err = initLog();
     if (err.second == FL_ERROR_LOG_EXISTS)
     {
-        fsmState = FL_HARNESS_EXAMPLE_STATE;
+        fsmState = FlashLogConfig::harnessExampleState;
         pc.printf("PRE-RESTORE:\tflightTimer = %" PRIu64 "us;\t", getFlightTimer());
         pc.printf("powerTimer = %" PRIu64 "us;\t", getPowerTimer());
-        pc.printf("fsmState = %s\r\n", FL_GET_STATE_NAME(fsmState));
+        pc.printf("fsmState = %s\r\n", FlashLogConfig::getStateName(fsmState));
 
 
         uint64_t restoredPowerTimer;
@@ -292,7 +292,7 @@ int FlashLogHarness::test_brownout_recovery()
 
 		pc.printf("POST-RESTORE:\tflightTimer = %" PRIu64 "us;\t", getFlightTimer());
 		pc.printf("powerTimer = %" PRIu64 "us;\t", getPowerTimer());
-        pc.printf("fsmState = %s\r\n", FL_GET_STATE_NAME(fsmState));
+        pc.printf("fsmState = %s\r\n", FlashLogConfig::getStateName(fsmState));
         printLastNBytes(0x50, 0x50);
         pc.printf("restoreFSMState exited with error %d\r\n", err);
         return err;
@@ -396,7 +396,7 @@ int FlashLogHarness::test_checksum()
     crc32(buf, buf_len, &checksum);
     pc.printf("checksum: %08lu (0x%08x)\r\n", checksum, checksum);
     */
-    populatePacketTail(LOG_TEXT, sizeof(tp_text), &tp_text, 0, 0, FL_HARNESS_EXAMPLE_STATE);
+    populatePacketTail(LOG_TEXT, sizeof(tp_text), &tp_text, 0, 0, FlashLogConfig::harnessExampleState);
     PRINT_BYTES(&tp_text, sizeof(tp_text)-sizeof(struct packet_tail)+offsetof(struct packet_tail, checksum));
     pc.printf("checksum: %08lu (0x%08lx)\r\n", tp_text.tail.checksum, tp_text.tail.checksum);
     pc.printf("Check the value above against an online crc32 calculator to confirm correct result.\r\n");
@@ -415,7 +415,7 @@ void FlashLogHarness::startTimers(uint64_t offset)
 
 int FlashLogHarness::write_pattern(uint32_t pattern, bd_addr_t start_addr, bd_size_t len)
 {
-    static uint32_t buf[FL_MAX_BLOCK_SIZE / 4]; // divide byte block size by 4 because buffer is 32 bit ints
+    static uint32_t buf[FlashLogConfig::maxBlockSize / 4]; // divide byte block size by 4 because buffer is 32 bit ints
     //fill the buf with the repeating pattern
     for (bd_size_t i=0; i<blockSize / 4; i++)
     {
@@ -430,7 +430,7 @@ int FlashLogHarness::write_pattern(uint32_t pattern, bd_addr_t start_addr, bd_si
     for (bd_addr_t i = start_addr; (i+blockSize)<(start_addr+len); i+=blockSize)
     {
         //write 256 bytes in a chunk
-        int err = sdBlockDev.program(buf, i, blockSize);
+        int err = harnessBlockDev->program(buf, i, blockSize);
         if (err)
         {
             pc.printf("Write error at 0x%08" PRIX64 ".\r\n", i);
@@ -449,7 +449,7 @@ int FlashLogHarness::write_pattern_through_flashlog(uint32_t pattern, const bd_a
 {
 	const bd_size_t writeBlockSize = 2 * blockSize;
 
-	static uint32_t buf[(2*FL_MAX_BLOCK_SIZE) / 4]; // divide byte block size by 4 because buffer is 32 bit ints
+	static uint32_t buf[(2*FlashLogConfig::maxBlockSize) / 4]; // divide byte block size by 4 because buffer is 32 bit ints
 	//fill the buf with the repeating pattern
 	for (bd_size_t i=0; i<writeBlockSize / 4; i++)
 	{
@@ -499,7 +499,7 @@ int FlashLogHarness::write_pattern_through_flashlog(uint32_t pattern, const bd_a
 
 int FlashLogHarness::check_pattern(uint32_t pattern, bd_addr_t start_addr, bd_size_t len)
 {
-    static char buf[FL_MAX_BLOCK_SIZE];
+    static char buf[FlashLogConfig::maxBlockSize];
     int mismatch_cnt = 0;
     //rounds down the len to align with the nearest 0x100'th byte
     uint32_t num_steps = len / blockSize;
@@ -507,7 +507,7 @@ int FlashLogHarness::check_pattern(uint32_t pattern, bd_addr_t start_addr, bd_si
     uint32_t cur_step = 0;
     for (bd_addr_t i=start_addr; i+blockSize<start_addr+len; i+=blockSize)
     {
-        int err = sdBlockDev.read(buf, i, blockSize);
+        int err = harnessBlockDev->read(buf, i, blockSize);
         if (err)
         {
             pc.printf("Read error at 0x%08" PRIX64 " .\r\n", i);
@@ -536,9 +536,9 @@ int FlashLogHarness::test_writeAtLargeAddress(){
     pc.printf("Chip initialized. \r\n");
     pc.printf("MAX SIZE: %" PRIx64 "\r\n", logEnd);
     uint32_t buf = 0xdeadbeef;
-    sdBlockDev.program(&buf, 0x03FFFFF0, 4);
+    harnessBlockDev->program(&buf, 0x03FFFFF0, 4);
     uint32_t frame;
-    sdBlockDev.read(&frame, 0x03FFFFF0, 4);
+    harnessBlockDev->read(&frame, 0x03FFFFF0, 4);
     pc.printf("Read %08" PRIx32 "\r\n", frame);
     return 0;
 }
@@ -546,7 +546,7 @@ int FlashLogHarness::test_writeAtLargeAddress(){
 int FlashLogHarness::test_bulkErase(){
 
 #if FL_IS_SPI_FLASH
-	static_cast<SPIFBlockDevice &>(sdBlockDev).bulk_erase();
+	static_cast<SPIFBlockDevice &>(harnessBlockDev).bulk_erase();
     test_check_erase();
 #else
     pc.printf("Bulk erase not implemented!\r\n");
@@ -579,7 +579,7 @@ int FlashLogHarness::test_avoid_partial_packet_tail()
         pc.printf("Log empty.\r\n");
     }
     pc.printf("Writing bad data starting at 0x%" PRIx64 "\r\n", nextPacketAddr);
-    sdBlockDev.program(badDataString, nextPacketAddr, sizeof(badDataString) - 1);
+    harnessBlockDev->program(badDataString, nextPacketAddr, sizeof(badDataString) - 1);
     pc.printf("Bad packet written. Please power cycle and run brownout_recovery test\r\n");
     return 0;
 }
