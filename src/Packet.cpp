@@ -27,6 +27,23 @@ size_t getPacketLen(uint8_t type) {
 	}
 }
 
+const char* getPacketName(uint8_t type)
+{
+	switch (type) {
+		case LOG_TEXT:         return "TEXT";
+		case LOG_TEMP:         return "TEMP";
+		case LOG_ACCEL:        return "ACCEL";
+		case LOG_BNO:          return "BNO";
+		case LOG_GPS:          return "GPS";
+		case LOG_BARO:         return "BARO";
+		case LOG_POWER:        return "POWER";
+		case LOG_ADIS:         return "ADIS";
+		case LOG_RANGEFINDER:  return "RANGEFINDER";
+        default:               return "Unknown Packet";
+	}
+
+}
+
 void printPacketTail(struct packet_tail const * tail, Stream & pc)
 {
 	char const * stateName;

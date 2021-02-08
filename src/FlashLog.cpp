@@ -723,7 +723,7 @@ void FlashLog::printPacketsReport(const uint8_t NUM_PACKETS_TO_FIND){
 
         if(packetsFound[i-1] > 0){
             pc.printf("%-13s AVG Data Rate: [%4" PRId32 "ms] : %3" PRIu32 " found\r\n", 
-                "SENSOR_IMU", packetDeltaAvg[i-1], packetsFound[i-1]);
+                getPacketName(i), packetDeltaAvg[i-1], packetsFound[i-1]);
         }
         else{
              pc.printf("%-13s AVG Data Rate: [   0ms]\r\n", "SENSOR_IMU");

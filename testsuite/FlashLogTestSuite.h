@@ -228,7 +228,7 @@ struct log_packet_gps tp_gps
 	2.1,
 	2.2,
 	2.3,
-	3,
+    static_cast<UBloxGPS::GPSFix>(3),
 	10,
 	3,
 	21,
