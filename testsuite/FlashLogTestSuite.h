@@ -180,41 +180,38 @@ class FlashLogHarness : public FlashLog
 			return chrono::duration_cast<chrono::microseconds>(flightTimer.elapsed_time()).count() + flightTimerOffset;
 		}
 
-		/**
-		 * @brief      Writes a pattern across the flash memory
-		 *
-		 * @param[in]  pattern  32-bit pattern to write
-		 * @param[in]  addr     The address at which we'll start writing the pattern
-		 * @param[in]  len      The length of memory across which to write the pattern, in bytes
-		 *
-		 * @return     err
-		 */
-		int write_pattern(uint32_t pattern, bd_addr_t start_addr, bd_size_t len);
+        /**
+         * @brief      Writes a pattern across the flash memory
+         *
+         * @param[in]  pattern    32-bit pattern to write
+         * @param[in]  start_addr The address at which we'll start writing the pattern
+         * @param[in]  len        The length of memory across which to write the pattern, in bytes
+         *
+         * @return     err
+         */
+        int write_pattern(uint32_t pattern, bd_addr_t start_addr, bd_size_t len);
 
-		/**
-		* @brief      Writes a pattern using FlashLog
-		*
-		* @param[in]  pattern  32-bit pattern to write
-		* @param[in]  addr     The address at which we'll start writing the pattern
-		* @param[in]  len      The length of memory across which to write the pattern, in bytes
-		*
-		* @return     err
-		*/
-		int write_pattern_through_flashlog(uint32_t pattern, bd_addr_t start_addr, bd_size_t len);
+        /**
+         * @brief      Writes a pattern using FlashLog
+         *
+         * @param[in]  pattern    32-bit pattern to write
+         * @param[in]  start_addr The address at which we'll start writing the pattern
+         * @param[in]  len        The length of memory across which to write the pattern, in bytes
+         *
+         * @return     err
+         */
+        int write_pattern_through_flashlog(uint32_t pattern, bd_addr_t start_addr, bd_size_t len);
 
-		/**
-		 * @brief      Checks that a pattern has been correctly written across the memory
-		 *
-		 * @param[in]  pattern  32-bit pattern to check for
-		 * @param[in]  addr     The address at which we'll start checking the pattern
-		 * @param[in]  len      The length of memory across which to check the pattern, in bytes
-		 *
-		 * @return     0 if the pattern is correctly written, -1 otherwise
-		 */
-		int check_pattern(uint32_t pattern, bd_addr_t start_addr, bd_size_t len);
-
-
-
+        /**
+         * @brief      Checks that a pattern has been correctly written across the memory
+         *
+         * @param[in]  pattern    32-bit pattern to check for
+         * @param[in]  start_addr The address at which we'll start checking the pattern
+         * @param[in]  len        The length of memory across which to check the pattern, in bytes
+         *
+         * @return     0 if the pattern is correctly written, -1 otherwise
+         */
+        int check_pattern(uint32_t pattern, bd_addr_t start_addr, bd_size_t len);
 };
 
 //test packet instantiation

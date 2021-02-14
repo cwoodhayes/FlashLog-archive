@@ -4,13 +4,6 @@
 
 #include <Packet.h>
 
-/* Returns the length of a given packet type. Makes the code more readable and
- * modular.
- *
- * @param[in]  type  The packet type
- *
- * @return     The packet length.
- */
 size_t getPacketLen(uint8_t type) {
 	switch (type) {
 		case LOG_TEXT:         return sizeof(struct log_packet_text);
@@ -90,14 +83,26 @@ void printPacket(void const * packetBytes, uint8_t packetType, Stream & pc)
 		case LOG_GPS:
 		{
 			auto lpgps = reinterpret_cast<struct log_packet_gps const *>(packetBytes);
-			pc.printf("fixQual=%" PRIu8 "\tnumSats=%d\tlat=%f\tlong=%f\talt=%f"
-                  "\tvelNED=[%.02f, %.02f, %.02f]"
-        		  "\ttime=%" PRIu8 "/%" PRIu8 "/%" PRIu16 " %" PRIu8 ":%" PRIu8 ":%" PRIu8 "\r\n",
-				lpgps->fixQuality, lpgps->numSatellites, lpgps->latitude, lpgps->longitude, lpgps->height,
-				lpgps->northVel/100.0, lpgps->eastVel/100.0, lpgps->downVel/100.0,
-				lpgps->month, lpgps->day, lpgps->year, lpgps->hour, lpgps->minute, lpgps->second);
-        	printPacketTail(&lpgps->tail, pc);
-		}
+            pc.printf("fixQual=%" PRIu8 "\tnumSats=%d\tlat=%f\tlong=%f\talt=%f"
+                      "\tvelNED=[%.02f, %.02f, %.02f]"
+                      "\ttime=%" PRIu8 "/%" PRIu8 "/%" PRIu16 " %" PRIu8 ":%" PRIu8 ":%" PRIu8
+                      "\r\n",
+                static_cast<uint8_t>(lpgps->fixQuality),
+                lpgps->numSatellites,
+                lpgps->latitude,
+                lpgps->longitude,
+                lpgps->height,
+                lpgps->northVel / 100.0,
+                lpgps->eastVel / 100.0,
+                lpgps->downVel / 100.0,
+                lpgps->month,
+                lpgps->day,
+                lpgps->year,
+                lpgps->hour,
+                lpgps->minute,
+                lpgps->second);
+            printPacketTail(&lpgps->tail, pc);
+        }
 		break;
 		case LOG_BNO:
 		{

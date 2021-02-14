@@ -5,6 +5,7 @@ import re, sys, os
 ## @brief      seeks through file until it finds a dump open tag
 ##
 ## @param      ifile  The file to seek through. Must already be opened
+## @param      dump_open_tag
 ##
 ## @return     true if bindump found, false if not
 ##
@@ -35,7 +36,6 @@ def seekToDump(ifile, dump_open_tag):
 ## 
 ##
 ## @param      filename   The intended filename of the file
-## @param      extension  The desired file extension
 ##
 ## @return     the available filename 
 ## 

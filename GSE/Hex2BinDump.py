@@ -10,6 +10,8 @@ import heatshrink2
 ##
 ## @param      ifile  The ifile file object
 ## @param      ofile  The ofile file object
+## @param      reverse If the ifile is reversed
+## @param      compressed If the hex is compressed
 ##
 ## @return     none
 ##
@@ -66,6 +68,8 @@ def hexdump2Bindump(ifile, ofile, reverse=False, compressed=False):
 ##
 ## @param      ifile  The ifile file object
 ## @param      ofile  The ofile file object
+## @param      reverse If the ifile is reversed
+## @param      compressed If the hex is compressed
 ##
 ## @return     none
 ##

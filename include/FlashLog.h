@@ -142,33 +142,32 @@ public:
 	 */
 	int wipeLog(bool complete=true);
 
-	/**
-	 * @brief      Reads the next `sizeof(log_binary_dump_frame)` bytes from the memory.
-	 *
-	 * @param      log_binary_dump_frame  The log binary dump frame
-	 * @param[in]  begin                  If true, start from the log's start address.
-	 * 									  If false, continue where you left off.
-	 *
-	 * @return     SUCCESS                  - read successful, call again
-	 *             ITERATION_DONE           - end of log reached, throw away this packet and do not call again
-	 */
-	FLResultCode binaryDumpIterator(struct log_binary_dump_frame *frame, bool begin);
+    /**
+     * @brief      Reads the next `sizeof(log_binary_dump_frame)` bytes from the memory.
+     *
+     * @param      frame  The log binary dump frame
+     * @param[in]  begin  If true, start from the log's start address.
+     * 					  If false, continue where you left off.
+     *
+     * @return     SUCCESS        - read successful, call again
+     *             ITERATION_DONE - end of log reached, throw away this packet and do not
+     * call again
+     */
+    FLResultCode binaryDumpIterator(struct log_binary_dump_frame* frame, bool begin);
 
-	/**
-	 * @brief      Reads the next `sizeof(log_binary_dump_frame)` bytes from the memory in reverse.
-	 *
-	 * @param      log_binary_dump_frame  The log binary dump frame. stores it in reverse
-	 * @param[in]  begin                  If true, start from the log's last written address.
-	 *                                    If false, continue where you left off.
-	 *
-	 * @return     SUCCESS  				- read successful, call again
-	 *             ITERATION_DONE     - end of log reached, throw away this packet and do not call again
-	 */
-	FLResultCode binaryDumpReverseIterator(struct log_binary_dump_frame *frame, bool begin);
+    /**
+     * @brief      Reads the next `sizeof(log_binary_dump_frame)` bytes from the memory in reverse.
+     *
+     * @param      frame The log binary dump frame. stores it in reverse
+     * @param[in]  begin If true, start from the log's last written address.
+     *                   If false, continue where you left off.
+     *
+     * @return SUCCESS        - read successful, call again
+     *         ITERATION_DONE - end of log reached, throw away this packet and do not call again
+     */
+    FLResultCode binaryDumpReverseIterator(struct log_binary_dump_frame* frame, bool begin);
 
-
-
-	/**
+    /**
 	 * @brief      Gets the total amount of flash memory available to the log
 	 *
 	 * @return     Log capacity in bytes
@@ -382,16 +381,20 @@ protected:
 	*/
 	FLResultCode findLastPacket();
 
-	/**
-	 * @brief      Populates the tail of a given packet with the proper data
-	 *
-	 * @param[in]  type    The packet type
-	 * @param[in]  len     The packet length
-	 * @param      packet  A buffer containing the packet
-	 */
-	void populatePacketTail(uint8_t type, size_t len, void *packet, ptimer_t pwr_ctr, ptimer_t flight_ctr, FlashLogConfig::State_t state);
+    /**
+     * @brief      Populates the tail of a given packet with the proper data
+     *
+     * @param[in] type       The packet type
+     * @param[in] len        The packet length
+     * @param     packet     A buffer containing the packet
+     * @param[in] pwr_ctr    The current time in the power counter
+     * @param[in] flight_ctr The current time in the flight counter
+     * @param[in] state      The state sending the request
+     */
+    void populatePacketTail(uint8_t type, size_t len, void* packet, ptimer_t pwr_ctr,
+        ptimer_t flight_ctr, FlashLogConfig::State_t state);
 
-	/**
+    /**
 	 * @brief      Calculates the checksum for a given packet
 	 *
 	 * @param[in]  len     The length of the packet

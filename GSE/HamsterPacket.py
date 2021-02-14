@@ -201,8 +201,8 @@ class HamsterPackets(dict):
 	## @brief      Adds a packet to the container
 	##
 	## @param      self  The object
-	## @param      data  Packet data as a bytearray() object
-	## @param      tail  Packet tail as a list, returned by struct.unpack
+	## @param      packet_bytes  Packet data as a bytearray() object
+	## @param      tail_struct  Packet tail as a list, returned by struct.unpack
 	##
 	## @return     Length of packet used in bytes
 	##
