@@ -224,19 +224,19 @@ struct log_packet_gps tp_gps
 {
 	2.1,
 	2.2,
-	2.3,
-    static_cast<UBloxGPS::GPSFix>(3),
+	20000,
 	10,
 	3,
 	21,
 	22,
-	23,
 	2019,
 	10,
 	22,
 	11,
 	5,
-	3
+	3,
+	23,
+	UBlox::GPSFix::FIX_3D
 };
 
 struct log_packet_bno tp_bno

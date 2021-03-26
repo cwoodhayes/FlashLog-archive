@@ -153,26 +153,25 @@ struct log_packet_gps
     double latitude;
     double longitude;
 
-    // Height ASL in meters
-    float height;
-
-    // Quality of the current fix
-    UBloxGPS::GPSFix fixQuality;
-
-    // Estimate of the accuracy of the current position in meters
-    float posAccuracy;
-
-    // current number of sats used for navigation
-    uint8_t numSatellites;
+    // Height above ellipsoid (mm)
+    int32_t height;
 
     // Variables for Velocity Solution in NED, units: cm/s
     int32_t northVel;
     int32_t eastVel;
     int32_t downVel;
 
+    // Estimate of the accuracy of the current position in meters
+    uint32_t posAccuracy;
+
     // time of the last GPS update
     uint16_t year;
     uint8_t month, day, hour, minute, second;
+    // current number of sats used for navigation
+    uint8_t numSatellites;
+
+    // Quality of the current fix
+    UBlox::GPSFix fixQuality;
 
     struct packet_tail tail;
 };
