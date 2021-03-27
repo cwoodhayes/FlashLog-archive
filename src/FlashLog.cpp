@@ -1,6 +1,6 @@
 /**
  * @file FlashLog.cpp
- * @author Conor Hayes, Ian Heidenberger, Skye Mceowen
+ * @author Conor Hayes, Ian Heidenberger, Skye Mceowen, Jamie Smith, Jasper Swallen
  * @date 3-17-2018
  * @brief File containing FlashLog packet storage class
  * 
@@ -14,7 +14,7 @@
 #include "FlashLog.h"
 #include "SerialStream.h"
 
-#define FL_DEBUG
+//#define FL_DEBUG
 
 FlashLog::FlashLog(BlockDevice & _blockDev, Stream & _pc):
 pc(_pc),
