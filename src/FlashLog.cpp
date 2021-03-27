@@ -1273,7 +1273,9 @@ uint32_t pointed to by CRC.
 @param[in]  n_bytes  The length of the data in bytes
 @param      crc      The checksum output
 */
-void crc32(const void *data, size_t n_bytes, uint32_t* crc) {
+void crc32(const void *data, size_t n_bytes, uint32_t* crc)
+{
+  *crc = 0;
   static uint32_t table[0x100];
   if(!*table)
     for(size_t i = 0; i < 0x100; ++i)
