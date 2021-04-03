@@ -544,16 +544,20 @@ int FlashLogHarness::test_writeAtLargeAddress(){
 }
 
 int FlashLogHarness::test_bulkErase(){
+    if (FlashLogConfig::isSPIFlash)
+    {
+        SPIFBlockDevice *spiFlashDev = dynamic_cast<SPIFBlockDevice*>(harnessBlockDev.get());
+        MBED_ASSERT(spiFlashDev != nullptr);
+        spiFlashDev->bulk_erase();
+        test_check_erase();
+    }
+    else
+    {
+        pc.printf("Bulk erase not implemented!\r\n");
+    }
 
-#if FL_IS_SPI_FLASH
-	static_cast<SPIFBlockDevice &>(harnessBlockDev).bulk_erase();
-    test_check_erase();
-#else
-    pc.printf("Bulk erase not implemented!\r\n");
-#endif
     return 0;
 }
-
 
 int FlashLogHarness::test_avoid_partial_packet_tail()
 {
@@ -629,7 +633,7 @@ int flash_test_main()
         //SWITCH. ADD A CASE FOR EACH TEST.
         switch(test)
         {
-            case 1:         pcStream.printf("Exiting test suite.\r\n");          return 0;
+            case 1:         pcStream.printf("Exiting test suite.\r\n");   return 0;
             case 2:         harness.test_chip_erase();                    break;
             case 3:         harness.test_chip_write_pattern();            break;
             case 4:         harness.test_chip_check_pattern();            break;
@@ -641,14 +645,13 @@ int flash_test_main()
             case 10:        harness.test_brownout_recovery_confirm();     break;
             case 11:        harness.test_wipe_log();                      break;
             case 12:        harness.test_dump_hex();                      break;
-            case 13:        harness.test_dump_binary(pcStream);                 break;
+            case 13:        harness.test_dump_binary(pcStream);           break;
             case 14: 		harness.test_chip_write_pattern_through_log();break;
             case 15:        harness.test_checksum();                      break;
             case 16:        harness.test_check_erase();                   break;
             case 17:        harness.test_writeAtLargeAddress();           break;
             case 18:        harness.test_bulkErase();                     break;
-            case 19:
-				harness.test_avoid_partial_packet_tail();       break;
+            case 19:        harness.test_avoid_partial_packet_tail();     break;
             default:        pcStream.printf("Invalid test number. Please run again.\r\n"); return 1;
         }
 
