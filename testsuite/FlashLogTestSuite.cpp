@@ -546,8 +546,7 @@ int FlashLogHarness::test_writeAtLargeAddress(){
 int FlashLogHarness::test_bulkErase(){
     if (FlashLogConfig::isSPIFlash)
     {
-        SPIFBlockDevice *spiFlashDev = dynamic_cast<SPIFBlockDevice*>(harnessBlockDev.get());
-        MBED_ASSERT(spiFlashDev != nullptr);
+        SPIFBlockDevice *spiFlashDev = reinterpret_cast<SPIFBlockDevice*>(harnessBlockDev.get());
         spiFlashDev->bulk_erase();
         test_check_erase();
     }
