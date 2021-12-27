@@ -778,11 +778,7 @@ int FlashLog::writePacket(uint8_t type, void *packet, ptimer_t pwr_ctr, ptimer_t
 }
 
 
-/* Erases the entire log, block-by-block.
-
- @return     { description_of_the_return_value }
-*/
-int FlashLog::wipeLog(bool complete)
+int FlashLog::wipeLog(bool complete, Callback<void(float)> progressCallback)
 {
     if(!FlashLogConfig::isSPIFlash)
     {    // set scratch buffer to 0xFF to program the log with
@@ -793,26 +789,19 @@ int FlashLog::wipeLog(bool complete)
     // hopefully the block device size is always a clean multiple of the sector size
     MBED_ASSERT(blockDev.size() % blockSize == 0);
 
-    //get the flash block size--the smallest chunk of memory that can be independentyl erased
-    size_t lastPacketAddress = nextPacketAddr;
+    // set eraseEndLoc to 1 byte past the last address to erase
+    bd_addr_t eraseEndLoc = complete ? logEnd : nextPacketAddr;
+
     // now erase sectors in order
-    pc.printf("Erasing flash log (0x%016" PRIx64 " - 0x%016" PRIx64 ").\r\n", logStart, complete ? logEnd : lastPacketAddress);
+    pc.printf("Erasing flash log [0x%016" PRIx64 " - 0x%016" PRIx64 ").\r\n", logStart, eraseEndLoc);
 
-    float prevProgress = 0;
-
-    for(bd_addr_t addr = logStart; addr+eraseBlockSize<=logEnd; addr += eraseBlockSize)
+    // note: this loop might erase past the last packet location when doing a non-complete erase,
+    // that's OK though because we assume everything past there is already erased.
+    for(bd_addr_t addr = logStart; addr < eraseEndLoc; addr += eraseBlockSize)
     {
-        if(complete == false && addr > lastPacketAddress){
-            break;
-        }
-
         // Print progress if process has advanced at least 0.01%
-        float progress = ( (float) addr / (getLogCapacity()))*100;
-        if(progress - prevProgress > .1f)
-		{
-        	prevProgress = progress;
-			pc.printf("(%.02f%%)\r\n", progress);
-		}
+        float progress = ((float) addr / static_cast<float>(eraseEndLoc))*100;
+		progressCallback(progress);
 
         if(FlashLogConfig::isSPIFlash)
         {
@@ -822,9 +811,6 @@ int FlashLog::wipeLog(bool complete)
         {
             err = blockDev.program(scratchBuffer, addr, blockSize);
         }
-
-        // make sure watchdog doesn't time out while we are erasing
-        Watchdog::get_instance().kick();
     }
     pc.printf("[FlashLog] Erase finished!\r\n");
 

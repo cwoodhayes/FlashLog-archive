@@ -137,10 +137,16 @@ public:
 
 	/**
 	 * @brief      Erase the contents of the log
-	 * @param[in]  complete  if false, will only erase uptill the last packet.  Otherwise, erases entire chip
+	 * @param[in]  complete  if false, will only erase uptill the last packet.  Otherwise, erases entire chip.
+	 *   Theoretically, it should be safe to erase any valid FlashLog with complete=false.  However, if data on
+	 *   the block device was corrupted in such a way that there's a large block of 0xFFs and then unerased
+	 *   sectors after that, FlashLog can fail to detect the end of the log.  So, if data might have been
+	 *   corrupted, you should use complete=true at the cost of much slower speed.
+	 * @param progressCallback Callback called when a block is erased.  Argument is the current progress percent
+	 *   of the erase operation from 0.0 to 100.0.
 	 * @return     sdBlockDev error
 	 */
-	int wipeLog(bool complete=true);
+	int wipeLog(bool complete, Callback<void(float)> progressCallback);
 
     /**
      * @brief      Reads the next `sizeof(log_binary_dump_frame)` bytes from the memory.

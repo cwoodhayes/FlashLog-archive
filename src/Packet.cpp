@@ -83,7 +83,7 @@ void printPacket(void const * packetBytes, uint8_t packetType, Stream & pc)
 		case LOG_GPS:
 		{
 			auto lpgps = reinterpret_cast<struct log_packet_gps const *>(packetBytes);
-            pc.printf("fixQual=%" PRIu8 "\tnumSats=%d\tlat=%f\tlong=%f\talt=%f"
+            pc.printf("fixQual=%" PRIu8 "\tnumSats=%d\tlat=%f\tlong=%f\talt=%" PRIi32
                       "\tvelNED=[%.02f, %.02f, %.02f]"
                       "\ttime=%" PRIu8 "/%" PRIu8 "/%" PRIu16 " %" PRIu8 ":%" PRIu8 ":%" PRIu8
                       "\r\n",

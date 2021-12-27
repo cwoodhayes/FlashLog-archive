@@ -99,7 +99,7 @@ class FlashLogHarness : public FlashLog
 		 *
 		 * @return     err
 		 */
-		int test_wipe_log();
+		int test_wipe_log(bool completeErase);
 
 		/**
 		 * @brief      Dump the entirety of the log's bytes in ascii-encoded hex

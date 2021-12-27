@@ -317,25 +317,35 @@ int FlashLogHarness::test_brownout_recovery_confirm()
     return 0;
 }
 
-int FlashLogHarness::test_wipe_log()
+int FlashLogHarness::test_wipe_log(bool completeErase)
 {
 	std::pair<bd_error, FLResultCode> err = initLog();
     if (err.second == FL_ERROR_LOG_EXISTS)
     {
         pc.printf("Wiping an existing log...\r\n");
-        wipeLog();
     }
     else if (err.second == FL_ERROR_BD_INIT)
     {
         pc.printf("SPIFBlockDevice driver init error.\r\n");
-    }
+		return err.second;
+	}
     else
     {
         pc.printf("Log is empty, but wiping it anyway...\r\n");
-        wipeLog();
     }
 
-    return err.second;
+	float prevProgress = 0;
+	wipeLog(completeErase, [&](float progress)
+	{
+		if(progress - prevProgress > 0.1f)
+		{
+			pc.printf("(%.02f%%)\r\n", progress);
+			prevProgress = progress;
+		}
+	});
+
+
+	return err.second;
 }
 
 int FlashLogHarness::test_dump_hex()
@@ -625,6 +635,7 @@ int flash_test_main()
         pcStream.printf("17. Write at Large Address\r\n");
         pcStream.printf("18. Bulk Erase\r\n");
         pcStream.printf("19. Write Magic Bad Packet\r\n");
+		pcStream.printf("20. Wipe Log (Dirty Part Only)\r\n");
 
         pcStream.scanf("%d", &test);
         pcStream.printf("Running test %d:\r\n\n", test);
@@ -642,7 +653,7 @@ int flash_test_main()
             case 8:         harness.test_write_bad_packet();              break;
             case 9:         harness.test_brownout_recovery();             break;
             case 10:        harness.test_brownout_recovery_confirm();     break;
-            case 11:        harness.test_wipe_log();                      break;
+            case 11:        harness.test_wipe_log(true);                  break;
             case 12:        harness.test_dump_hex();                      break;
             case 13:        harness.test_dump_binary(pcStream);           break;
             case 14: 		harness.test_chip_write_pattern_through_log();break;
@@ -651,7 +662,8 @@ int flash_test_main()
             case 17:        harness.test_writeAtLargeAddress();           break;
             case 18:        harness.test_bulkErase();                     break;
             case 19:        harness.test_avoid_partial_packet_tail();     break;
-            default:        pcStream.printf("Invalid test number. Please run again.\r\n"); return 1;
+			case 20:        harness.test_wipe_log(false);                 break;
+			default:        pcStream.printf("Invalid test number. Please run again.\r\n"); return 1;
         }
 
         pcStream.printf("done.\r\n");
