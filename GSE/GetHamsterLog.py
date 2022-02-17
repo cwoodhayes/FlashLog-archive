@@ -59,7 +59,7 @@ def main():
 					args.dump_baud = 921600
 
 			ser.flushOutput()
-			time.sleep(.01) # wait a few ms for the previous write to go through (can't find another way than this)
+			time.sleep(.05) # wait a few ms for the previous write to go through (can't find another way than this)
 			ser.baudrate = args.dump_baud
 
 			READ_BLOCK_SIZE = 256
