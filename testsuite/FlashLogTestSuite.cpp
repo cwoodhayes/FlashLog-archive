@@ -351,7 +351,7 @@ int FlashLogHarness::test_wipe_log(bool completeErase)
 int FlashLogHarness::test_dump_hex()
 {
     pc.printf("Dumping entirety of log into hex...\r\n<hexdump>\r\n");
-    struct log_binary_dump_frame frame;
+    static struct log_binary_dump_frame frame;
     FLASHLOG_BINARY_ITERATE(this, frame)
     {
         PRINT_BYTES(&frame, sizeof(log_binary_dump_frame));
