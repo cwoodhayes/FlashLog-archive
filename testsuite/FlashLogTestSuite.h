@@ -111,7 +111,7 @@ class FlashLogHarness : public FlashLog
 		 * @brief      Dump the entirety of the log's bytes in raw binary
 		 * @return     err
 		 */
-		int test_dump_binary(Stream &pc);
+		int test_dump_binary();
 
 		/**
 		 * @brief      Check that the log is empty

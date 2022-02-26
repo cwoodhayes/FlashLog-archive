@@ -37,7 +37,7 @@ const char* getPacketName(uint8_t type)
 
 }
 
-void printPacketTail(struct packet_tail const * tail, Stream & pc)
+void printPacketTail(struct packet_tail const * tail)
 {
 	char const * stateName;
 	if(FlashLogConfig::isValidState(static_cast<FlashLogConfig::State_t>(tail->state)))
@@ -49,41 +49,41 @@ void printPacketTail(struct packet_tail const * tail, Stream & pc)
 		stateName = "<invalid state>";
 	}
 
-	pc.printf("tail.magic = %04" PRIX16 "%02" PRIX8 "; \r\ntail.state = %s;\r\n", tail->magic1, tail->magic2,  stateName);
-	pc.printf("tail.typeID = %" PRIX8 "; \r\ntail.pwr_ctr = %" PRIu64 ";\r\n", tail->typeID, tail->pwr_ctr);
-	pc.printf("tail.flight_ctr = %" PRIu64 "; \r\ntail.checksum = %08" PRIX32 "\r\n", tail->flight_ctr, tail->checksum);
-	pc.printf("tail.magic3 = %08" PRIX32 "\r\n", tail->magic3);
+	printf("tail.magic = %04" PRIX16 "%02" PRIX8 "; \r\ntail.state = %s;\r\n", tail->magic1, tail->magic2,  stateName);
+	printf("tail.typeID = %" PRIX8 "; \r\ntail.pwr_ctr = %" PRIu64 ";\r\n", tail->typeID, tail->pwr_ctr);
+	printf("tail.flight_ctr = %" PRIu64 "; \r\ntail.checksum = %08" PRIX32 "\r\n", tail->flight_ctr, tail->checksum);
+	printf("tail.magic3 = %08" PRIX32 "\r\n", tail->magic3);
 }
 
-void printPacket(void const * packetBytes, uint8_t packetType, Stream & pc)
+void printPacket(void const * packetBytes, uint8_t packetType)
 {
 	switch(packetType)
 	{
 		case LOG_TEXT:
 		{
 			auto lptxt = reinterpret_cast<struct log_packet_text const *>(packetBytes);
-			pc.printf("msg=%s\r\n", lptxt->msg);
-        	printPacketTail(&lptxt->tail, pc);
+			printf("msg=%s\r\n", lptxt->msg);
+        	printPacketTail(&lptxt->tail);
 		}
 		break;
 		case LOG_TEMP:
 		{
 			auto lptmp = reinterpret_cast<struct log_packet_temp const *>(packetBytes);
-			pc.printf("temp=%f\r\n", lptmp->temp);
-			printPacketTail(&lptmp->tail, pc);
+			printf("temp=%f\r\n", lptmp->temp);
+			printPacketTail(&lptmp->tail);
 		}
 		break;
 		case LOG_ACCEL:
 		{
 			auto lpaccel = reinterpret_cast<struct log_packet_accel const *>(packetBytes);
-			pc.printf("ax=%" PRIi16 "\tay=%" PRIi16 "\taz=%" PRIi16 "\r\n", lpaccel->ax, lpaccel->ay, lpaccel->az);
-			printPacketTail(&lpaccel->tail, pc);
+			printf("ax=%" PRIi16 "\tay=%" PRIi16 "\taz=%" PRIi16 "\r\n", lpaccel->ax, lpaccel->ay, lpaccel->az);
+			printPacketTail(&lpaccel->tail);
 		}
 		break;
 		case LOG_GPS:
 		{
 			auto lpgps = reinterpret_cast<struct log_packet_gps const *>(packetBytes);
-            pc.printf("fixQual=%" PRIu8 "\tnumSats=%d\tlat=%f\tlong=%f\talt=%" PRIi32
+            printf("fixQual=%" PRIu8 "\tnumSats=%d\tlat=%f\tlong=%f\talt=%" PRIi32
                       "\tvelNED=[%.02f, %.02f, %.02f]"
                       "\ttime=%" PRIu8 "/%" PRIu8 "/%" PRIu16 " %" PRIu8 ":%" PRIu8 ":%" PRIu8
                       "\r\n",
@@ -101,50 +101,50 @@ void printPacket(void const * packetBytes, uint8_t packetType, Stream & pc)
                 lpgps->hour,
                 lpgps->minute,
                 lpgps->second);
-            printPacketTail(&lpgps->tail, pc);
+            printPacketTail(&lpgps->tail);
         }
 		break;
 		case LOG_BNO:
 		{
 			auto lpbno = reinterpret_cast<struct log_packet_bno const *>(packetBytes);
-			pc.printf("qx=%f\tqy=%f\tqz=%f\tqw=%f\tax=%f\tay=%f\taz=%f\tcalib=%hhu\r\n",
+			printf("qx=%f\tqy=%f\tqz=%f\tqw=%f\tax=%f\tay=%f\taz=%f\tcalib=%hhu\r\n",
         		lpbno->quatX, lpbno->quatY, lpbno->quatZ, lpbno->quatW, lpbno->ax, lpbno->ay, lpbno->az, lpbno->calib);
-        	printPacketTail(&lpbno->tail, pc);
+        	printPacketTail(&lpbno->tail);
 		}
 		break;
 		case LOG_BARO:
 		{
 			auto lpbaro = reinterpret_cast<struct log_packet_baro const *>(packetBytes);
-			pc.printf("altitude=%.02f\tpressure=%" PRIu32 "\ttemp=%.01f\r\n",
+			printf("altitude=%.02f\tpressure=%" PRIu32 "\ttemp=%.01f\r\n",
         		lpbaro->altitude, lpbaro->pressure, lpbaro->temperature);
-			printPacketTail(&lpbaro->tail, pc);
+			printPacketTail(&lpbaro->tail);
 		}
 		break;
 		case LOG_POWER:
 		{
 			auto lppower = reinterpret_cast<struct log_packet_power const *>(packetBytes);
-			pc.printf("battVoltage=%.02f\tbattCurrent=%.03f\treg5VCurrent=%.02f\tchargePercent=%" PRIu8 "\r\n",
+			printf("battVoltage=%.02f\tbattCurrent=%.03f\treg5VCurrent=%.02f\tchargePercent=%" PRIu8 "\r\n",
 			 	lppower->battVoltage, lppower->battCurrent, lppower->reg5VCurrent, lppower->chargePercent);
-			printPacketTail(&lppower->tail, pc);
+			printPacketTail(&lppower->tail);
 		}
 		break;
 		case LOG_ADIS:
 		{
 			auto lpadis = reinterpret_cast<struct log_packet_adis const *>(packetBytes);
-			pc.printf("gyroX=%.02f\tgyroY=%.02f\tgyroZ=%.02f\r\naccelX=%.02f\taccelY=%.02f\taccelZ=%.02f\r\n",
+			printf("gyroX=%.02f\tgyroY=%.02f\tgyroZ=%.02f\r\naccelX=%.02f\taccelY=%.02f\taccelZ=%.02f\r\n",
 			 	lpadis->gyroX, lpadis->gyroY, lpadis->gyroZ, lpadis->accelX, lpadis->accelY, lpadis->accelZ);
-			printPacketTail(&lpadis->tail, pc);
+			printPacketTail(&lpadis->tail);
 		}
 		break;
 		case LOG_RANGEFINDER:
 		{
 			auto lprange = reinterpret_cast<struct log_packet_rangefinder const *>(packetBytes);
-			pc.printf("distance=%.02f\trssi=%.01f\tlqi=%" PRIi8 "\r\n",
+			printf("distance=%.02f\trssi=%.01f\tlqi=%" PRIi8 "\r\n",
 					  lprange->distance, lprange->rssi, lprange->linkQual);
-			printPacketTail(&lprange->tail, pc);
+			printPacketTail(&lprange->tail);
 		}
 		break;
 		default:
-			pc.printf("<Unknown packet>\r\n");
+			printf("<Unknown packet>\r\n");
 	}
 }

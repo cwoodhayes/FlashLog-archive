@@ -12,12 +12,10 @@
 #include <cstring>
 
 #include "FlashLog.h"
-#include "SerialStream.h"
 
 //#define FL_DEBUG
 
-FlashLog::FlashLog(BlockDevice & _blockDev, Stream & _pc):
-pc(_pc),
+FlashLog::FlashLog(BlockDevice & _blockDev):
 blockDev(_blockDev)
 {
     logInitialized = false;
@@ -50,15 +48,15 @@ std::pair<bd_error, FLResultCode> FlashLog::initLog() {
     bd_error blockDevErr = static_cast<bd_error>(blockDev.init());
     if (blockDevErr)
     {
-        pc.printf("[FlashLog] Error %d initializing device!", blockDevErr);
+        printf("[FlashLog] Error %d initializing device!", blockDevErr);
         return {blockDevErr, FL_ERROR_BD_INIT};
     }
 
 #ifdef FL_DEBUG
-      pc.printf("block device size: 0x%" PRIX64 "\r\n",         blockDev.size());
-      pc.printf("block device read size: 0x%" PRIX64 "\r\n",    blockDev.get_read_size());
-      pc.printf("block device program size: 0x%" PRIX64 "\r\n", blockDev.get_program_size());
-      pc.printf("block device erase size: 0x%" PRIX64 "\r\n",   blockDev.get_erase_size());
+      printf("block device size: 0x%" PRIX64 "\r\n",         blockDev.size());
+      printf("block device read size: 0x%" PRIX64 "\r\n",    blockDev.get_read_size());
+      printf("block device program size: 0x%" PRIX64 "\r\n", blockDev.get_program_size());
+      printf("block device erase size: 0x%" PRIX64 "\r\n",   blockDev.get_erase_size());
 #endif
 
 	// detect log size from block device
@@ -68,7 +66,7 @@ std::pair<bd_error, FLResultCode> FlashLog::initLog() {
     {	
         if(blockDev.get_program_size() != blockDev.get_read_size() || blockDev.get_program_size() != blockDev.get_erase_size())
         {
-            pc.printf("[FlashLog] Error: Program, erase, and read sizes of the memory must be equal in SD card mode\r\n");
+            printf("[FlashLog] Error: Program, erase, and read sizes of the memory must be equal in SD card mode\r\n");
         }
     }
 
@@ -76,7 +74,7 @@ std::pair<bd_error, FLResultCode> FlashLog::initLog() {
 	blockSize = blockDev.get_program_size();
 	if(blockSize > FlashLogConfig::maxBlockSize)
 	{
-		pc.printf("[FlashLog] Error: Not compiled with support for memory with block size %" PRIu64 ", please increase FlashLogConfig::maxBlockSize\r\n", blockSize);
+		printf("[FlashLog] Error: Not compiled with support for memory with block size %" PRIu64 ", please increase FlashLogConfig::maxBlockSize\r\n", blockSize);
 		return {BD_ERROR_OK, FL_ERROR_BD_PARAMS};
 	}
 
@@ -91,7 +89,7 @@ std::pair<bd_error, FLResultCode> FlashLog::initLog() {
         err = findLastPacket();
         if (err)
         {
-            pc.printf("[FlashLog] Init err %d\r\n", err);
+            printf("[FlashLog] Init err %d\r\n", err);
             return {BD_ERROR_OK, err};
         }
         else
@@ -105,9 +103,9 @@ std::pair<bd_error, FLResultCode> FlashLog::initLog() {
     }
     this->logInitialized = true;
 
-	pc.printf("[FlashLog]: Log initialized from 0x%016" PRIX64 "-0x%016" PRIX64 ".\r\n",
+	printf("[FlashLog]: Log initialized from 0x%016" PRIX64 "-0x%016" PRIX64 ".\r\n",
                         getLogStartAddress(), getLogStartAddress()+getLogCapacity());
-    pc.printf("[FlashLog]: Log is currently %.1f%% filled (%" PRIu64 " bytes).\r\n",
+    printf("[FlashLog]: Log is currently %.1f%% filled (%" PRIu64 " bytes).\r\n",
                         (float) getLogSize() * 100.0 / (float) getLogCapacity(), getLogSize());
     return {BD_ERROR_OK, err};
 }
@@ -118,7 +116,7 @@ bool FlashLog::logExists(FLResultCode *err) {
     *err = readFromLog(buf, logStart, MAX_PACKET_LEN);
     for (size_t i=0; i<MAX_PACKET_LEN; i++) {
         if (buf[i] != 0xFF){
-            // pc.printf("i:%" PRIu32 " c:%x %x\r\n",i,buf[i], ~buf[i]);
+            // printf("i:%" PRIu32 " c:%x %x\r\n",i,buf[i], ~buf[i]);
             return true;
         }
     }
@@ -164,9 +162,9 @@ FLResultCode FlashLog::findLastPacket() {
             }
         }
 #ifdef FL_DEBUG
-        pc.printf("\tBinary search: checking middle of 0x%016" PRIX64 "-0x%016" PRIX64 " range (0x%016" PRIX64 ") for any packet data\r\n", start, end, middle);
+        printf("\tBinary search: checking middle of 0x%016" PRIX64 "-0x%016" PRIX64 " range (0x%016" PRIX64 ") for any packet data\r\n", start, end, middle);
         PRINT_BYTES(scratchBuffer, MAX_PACKET_LEN);
-        pc.printf("\r\n");
+        printf("\r\n");
 #endif
 
         //if we found a packet, search higher addresses. Else, search lower addresses.
@@ -175,7 +173,7 @@ FLResultCode FlashLog::findLastPacket() {
     }
 
     if(middle == (logEnd - searchBlockSize) && !isPacket){
-        pc.printf("Could not find end of log! Log may be full\r\n");
+        printf("Could not find end of log! Log may be full\r\n");
         return FL_ERROR_BOUNDS;
     }
 
@@ -200,7 +198,7 @@ FLResultCode FlashLog::findLastPacket() {
 	}
 
 #ifdef FL_DEBUG
-	pc.printf("discovered end of logfile near %016" PRIX64 ". Final packet must exist somewhere in this region:\r\n", start);
+	printf("discovered end of logfile near %016" PRIX64 ". Final packet must exist somewhere in this region:\r\n", start);
     PRETTYPRINT_BYTES(scratchBuffer, finalRegionSize, finalRegionStart);
 #endif
 
@@ -211,7 +209,7 @@ FLResultCode FlashLog::findLastPacket() {
         if (scratchBuffer[currAddr - finalRegionStart] != 0xFF) lastDirtyByte = currAddr;
     }
 #ifdef FL_DEBUG
-    pc.printf("\r\nLast dirty byte found at flash address 0x%016" PRIX64 "\r\n", lastDirtyByte);
+    printf("\r\nLast dirty byte found at flash address 0x%016" PRIX64 "\r\n", lastDirtyByte);
 #endif
 
     readFromLog(writeCache, roundDownToNearestBlock(lastDirtyByte), blockSize);
@@ -236,9 +234,9 @@ FLResultCode FlashLog::findLastPacket() {
 
         //tailp now points to the first byte in the tail, if this is a valid packet
 #ifdef FL_DEBUG
-        pc.printf("Hopefully this is a tail. If not, we'll mark it as invalid and handle it in restoreFSMState:");
+        printf("Hopefully this is a tail. If not, we'll mark it as invalid and handle it in restoreFSMState:");
         PRETTYPRINT_BYTES(&possibleTail, sizeof(struct packet_tail), lastDirtyByte-sizeof(struct packet_tail)+1);
-        pc.printf("\r\n");
+        printf("\r\n");
 #endif
 
         tailValid = isTail(&possibleTail);
@@ -257,12 +255,12 @@ FLResultCode FlashLog::findLastPacket() {
     }
     else
     {
-        pc.printf ("invalid tail! Writing tail of type LOG_INVALID starting at 0x%016" PRIX64 ":\r\n", nextPacketAddr);
+        printf ("invalid tail! Writing tail of type LOG_INVALID starting at 0x%016" PRIX64 ":\r\n", nextPacketAddr);
         //reuse the buffer tailp points to since its data is invalid anyhow
         struct packet_tail invalidTail = {};
         populatePacketTail(LOG_INVALID, sizeof(struct packet_tail), &invalidTail, 0, 0, FlashLogConfig::invalidState);
-        pc.printf("tail mbed addr: %p; flash addr: %016" PRIX64 "\r\n", &invalidTail, nextPacketAddr);
-        pc.printf("Word of warning: This tail may look gross. But all that matters is magic and packet type. Tail:\r\n");
+        printf("tail mbed addr: %p; flash addr: %016" PRIX64 "\r\n", &invalidTail, nextPacketAddr);
+        printf("Word of warning: This tail may look gross. But all that matters is magic and packet type. Tail:\r\n");
         PRINT_BYTES(&invalidTail, sizeof(struct packet_tail));
         writeToLog(&invalidTail, nextPacketAddr, sizeof(struct packet_tail));
         nextPacketAddr += sizeof(struct packet_tail);
@@ -284,7 +282,7 @@ int FlashLog::writeToLog(const void *buffer, bd_addr_t addr, bd_size_t size)
 	}
 
 #ifdef FL_DEBUG
-	pc.printf("[writeToLog()] Called to program 0x%" PRIx64 " bytes starting at addr 0x%" PRIx64 "\r\n", size, addr);
+	printf("[writeToLog()] Called to program 0x%" PRIx64 " bytes starting at addr 0x%" PRIx64 "\r\n", size, addr);
 #endif
 
     if(firstWriteToLog)
@@ -312,7 +310,7 @@ int FlashLog::writeToLog(const void *buffer, bd_addr_t addr, bd_size_t size)
         // if the next write is after the end of the block, flush current block,
         // set cacheBlockAddress, and follow logic as expected
 #ifdef FL_DEBUG
-		pc.printf("[writeToLog(): o] Programming to 0x%" PRIx64 ": ", cacheBlockAddress);
+		printf("[writeToLog(): o] Programming to 0x%" PRIx64 ": ", cacheBlockAddress);
 		PRETTYPRINT_BYTES(writeCache, blockSize, cacheBlockAddress);
 #endif
         err = blockDev.program(writeCache, cacheBlockAddress, blockSize);
@@ -332,7 +330,7 @@ int FlashLog::writeToLog(const void *buffer, bd_addr_t addr, bd_size_t size)
         memcpy(&writeCache[writeStartOffset], buffer, leftoverIndex);
 
 #ifdef FL_DEBUG
-		pc.printf("[writeToLog(): s+o] Programming to 0x%" PRIx64 ": ", cacheBlockAddress);
+		printf("[writeToLog(): s+o] Programming to 0x%" PRIx64 ": ", cacheBlockAddress);
 		PRETTYPRINT_BYTES(writeCache, blockSize, cacheBlockAddress);
 #endif
         err = blockDev.program(writeCache, cacheBlockAddress, blockSize);
@@ -344,7 +342,7 @@ int FlashLog::writeToLog(const void *buffer, bd_addr_t addr, bd_size_t size)
         {
             // writes in chunks of SD_BLOCK_SIZE bytes
 #ifdef FL_DEBUG
-			pc.printf("[writeToLog(): l] Programming to 0x%" PRIx64 ": ", cacheBlockAddress);
+			printf("[writeToLog(): l] Programming to 0x%" PRIx64 ": ", cacheBlockAddress);
 			PRETTYPRINT_BYTES(&(reinterpret_cast<const uint8_t *>(buffer)[leftoverIndex]), blockSize, cacheBlockAddress);
 #endif
             err = blockDev.program(&(reinterpret_cast<const uint8_t *>(buffer)[leftoverIndex]),
@@ -377,7 +375,7 @@ int FlashLog::writeToLog(const void *buffer, bd_addr_t addr, bd_size_t size)
     {
     	// Flush write cache to chip
 #ifdef FL_DEBUG
-		pc.printf("[writeToLog()] Flushing cache: programming to 0x%" PRIx64 ": ", cacheBlockAddress);
+		printf("[writeToLog()] Flushing cache: programming to 0x%" PRIx64 ": ", cacheBlockAddress);
 		PRETTYPRINT_BYTES(writeCache, blockSize, cacheBlockAddress);
 #endif
         err = blockDev.program(writeCache, cacheBlockAddress, blockSize);
@@ -511,7 +509,7 @@ bool FlashLog::tailDescribesValidPacket(struct packet_tail * checkingTail, bd_ad
           || checkingTail->magic3 != LOG_PACKET_MAGIC3)
         {
 #ifdef FL_DEBUG
-            pc.printf("Candidate packet has invalid magic numbers.\r\n");
+            printf("Candidate packet has invalid magic numbers.\r\n");
 #endif
             return false;
         }
@@ -521,7 +519,7 @@ bool FlashLog::tailDescribesValidPacket(struct packet_tail * checkingTail, bd_ad
             // This is an invalid packet written by initLog() when it finds garbage at the end
             // of the log.  We want to skip it and find the next valid packet.
 #ifdef FL_DEBUG
-            pc.printf("Candidate packet has type LOG_INVALID.\r\n");
+            printf("Candidate packet has type LOG_INVALID.\r\n");
 #endif
             return false;
         }
@@ -532,7 +530,7 @@ bool FlashLog::tailDescribesValidPacket(struct packet_tail * checkingTail, bd_ad
         if(checkingTail->typeID >= LOG_END_TYPEID)
         {
 #ifdef FL_DEBUG
-            pc.printf("Candidate packet has invalid typeID %" PRIu8 ".\r\n", checkingTail->typeID);
+            printf("Candidate packet has invalid typeID %" PRIu8 ".\r\n", checkingTail->typeID);
             PRETTYPRINT_BYTES(&checkingTail, sizeof(struct packet_tail), tailAddr);
 #endif
             return false;
@@ -546,7 +544,7 @@ bool FlashLog::tailDescribesValidPacket(struct packet_tail * checkingTail, bd_ad
         {
             // protect against unsigned rollover when checking if packetStartAddr < LOG_START_ADDR
 #ifdef FL_DEBUG
-            pc.printf("Candidate packet has impossible packet type\r\n");
+            printf("Candidate packet has impossible packet type\r\n");
 #endif
             return false;
         }
@@ -562,9 +560,9 @@ bool FlashLog::tailDescribesValidPacket(struct packet_tail * checkingTail, bd_ad
         if(packetChecksum != checkingTail->checksum)
         {
 #ifdef FL_DEBUG
-            pc.printf("Candidate packet has invalid checksum.\r\n");
-            pc.printf("Calculated Checksum %" PRIx32 "\r\n", packetChecksum);
-            pc.printf("Existing Checksum %" PRIx32 "\r\n", checkingTail->checksum);
+            printf("Candidate packet has invalid checksum.\r\n");
+            printf("Calculated Checksum %" PRIx32 "\r\n", packetChecksum);
+            printf("Existing Checksum %" PRIx32 "\r\n", checkingTail->checksum);
             PRETTYPRINT_BYTES(&checkingTail, sizeof(struct packet_tail), tailAddr);
 #endif
             return false;
@@ -587,7 +585,7 @@ FLResultCode FlashLog::readTailAt(bd_addr_t addr, struct packet_tail* buf){
 FLResultCode FlashLog::restoreFSMState(FlashLogConfig::State_t *s, ptimer_t *pwr_ctr, ptimer_t *flight_ctr)
 {
     if (!logInitialized) {
-        pc.printf("[FlashLog] ERROR: no init (restoreFSMState)\r\n");
+        printf("[FlashLog] ERROR: no init (restoreFSMState)\r\n");
         return FL_ERROR_LOGNOINIT;
     }
 
@@ -611,7 +609,7 @@ FLResultCode FlashLog::restoreFSMState(FlashLogConfig::State_t *s, ptimer_t *pwr
         }
         else{
             // checked the maximum distance and found nothing.
-            pc.printf("FATAL ERROR: Valid packet not found after %d bytes, FSM State not restored. \r\n", MAX_PACKET_LEN * MAX_PACKETS_TO_CHECK);
+            printf("FATAL ERROR: Valid packet not found after %d bytes, FSM State not restored. \r\n", MAX_PACKET_LEN * MAX_PACKETS_TO_CHECK);
             return FL_ERROR_FSM_NOT_RESTORED;
         }
     }
@@ -619,7 +617,7 @@ FLResultCode FlashLog::restoreFSMState(FlashLogConfig::State_t *s, ptimer_t *pwr
     if(!(FlashLogConfig::isValidState(static_cast<FlashLogConfig::State_t>(restorationTail->state))))
 	{
     	// invalid state ID -- maybe data is from a different version of the application?
-		pc.printf("FATAL ERROR: Valid packet found but state %" PRIu8 " is not valid. \r\n", restorationTail->state);
+		printf("FATAL ERROR: Valid packet found but state %" PRIu8 " is not valid. \r\n", restorationTail->state);
 		return FL_ERROR_FSM_NOT_RESTORED;
 	}
 
@@ -713,28 +711,28 @@ void FlashLog::printPacketsReport(const uint8_t NUM_PACKETS_TO_FIND){
 
     // Print out all the packet types and their averages.
     
-    pc.printf("\r\n======================================\r\n");
-    pc.printf("Last Packet Tail found at: %016" PRIx64 "\r\n", getLastTailAddr());
-    pc.printf("Searched %d packets\r\n", numPacketsSearched);
+    printf("\r\n======================================\r\n");
+    printf("Last Packet Tail found at: %016" PRIx64 "\r\n", getLastTailAddr());
+    printf("Searched %d packets\r\n", numPacketsSearched);
 
     
     for(int i = 1; i < numPacketTypes + 1; i++){
         if (i == LOG_TEXT || i == LOG_INVALID){ continue; }
 
         if(packetsFound[i-1] > 0){
-            pc.printf("%-13s AVG Data Rate: [%4" PRId32 "ms] : %3" PRIu32 " found\r\n", 
+            printf("%-13s AVG Data Rate: [%4" PRId32 "ms] : %3" PRIu32 " found\r\n", 
                 getPacketName(i), packetDeltaAvg[i-1], packetsFound[i-1]);
         }
         else{
-             pc.printf("%-13s AVG Data Rate: [   0ms]\r\n", "SENSOR_IMU");
+             printf("%-13s AVG Data Rate: [   0ms]\r\n", "SENSOR_IMU");
         }
     }
-    pc.printf("======================================\r\n\r\n");
+    printf("======================================\r\n\r\n");
 }
 
 int FlashLog::writePacket(uint8_t type, void *packet, ptimer_t pwr_ctr, ptimer_t flight_ctr, FlashLogConfig::State_t state) {
     if (!logInitialized) {
-        pc.printf("[FlashLog] ERROR: no init (writePacket)\r\n");
+        printf("[FlashLog] ERROR: no init (writePacket)\r\n");
         return FL_ERROR_LOGNOINIT;
     }
     MBED_ASSERT(logInitialized);    //log must have been initialized
@@ -756,9 +754,9 @@ int FlashLog::writePacket(uint8_t type, void *packet, ptimer_t pwr_ctr, ptimer_t
 
 #ifdef FL_DEBUG
     PRINT_PACKET_BYTES(type, packet);
-    pc.printf("Writing packet type %" PRIX8 " to 0x%016" PRIX64 "\r\n", type, nextPacketAddr);
-    // pc.printf("Current Tail State: %d\r\n", packet.tail->state);
-    pc.printf("Current State: %s\r\n", FlashLogConfig::getStateName(state));
+    printf("Writing packet type %" PRIX8 " to 0x%016" PRIX64 "\r\n", type, nextPacketAddr);
+    // printf("Current Tail State: %d\r\n", packet.tail->state);
+    printf("Current State: %s\r\n", FlashLogConfig::getStateName(state));
 #endif
 
     int err = writeToLog(packet, nextPacketAddr, len);
@@ -771,7 +769,7 @@ int FlashLog::writePacket(uint8_t type, void *packet, ptimer_t pwr_ctr, ptimer_t
     }
 #ifdef FL_DEBUG
     else {
-            pc.printf("[FlashLog] error (%d) writing packet type %" PRIX8 " to 0x%016" PRIX64 "\r\n", err, type, nextPacketAddr);
+            printf("[FlashLog] error (%d) writing packet type %" PRIX8 " to 0x%016" PRIX64 "\r\n", err, type, nextPacketAddr);
     }
 #endif
     return err;
@@ -793,7 +791,7 @@ int FlashLog::wipeLog(bool complete, Callback<void(float)> progressCallback)
     bd_addr_t eraseEndLoc = complete ? logEnd : nextPacketAddr;
 
     // now erase sectors in order
-    pc.printf("Erasing flash log [0x%016" PRIx64 " - 0x%016" PRIx64 ").\r\n", logStart, eraseEndLoc);
+    printf("Erasing flash log [0x%016" PRIx64 " - 0x%016" PRIx64 ").\r\n", logStart, eraseEndLoc);
 
     // note: this loop might erase past the last packet location when doing a non-complete erase,
     // that's OK though because we assume everything past there is already erased.
@@ -812,7 +810,7 @@ int FlashLog::wipeLog(bool complete, Callback<void(float)> progressCallback)
             err = blockDev.program(scratchBuffer, addr, blockSize);
         }
     }
-    pc.printf("[FlashLog] Erase finished!\r\n");
+    printf("[FlashLog] Erase finished!\r\n");
 
     // reset all FlashLog data
     nextPacketAddr = logStart;
@@ -947,7 +945,7 @@ bd_addr_t FlashLog::findPacketTailBefore(bd_addr_t curPacketTailAddr, struct pac
         if (curPacketTailAddr < logStart + getPacketLen(curPacketTail->typeID))
         {
 #ifdef FL_DEBUG
-            pc.printf("[findPacketTailBefore] Next Packet will Underflow. NOTAIL");
+            printf("[findPacketTailBefore] Next Packet will Underflow. NOTAIL");
 #endif
 
             return FL_ERROR_NOTAIL;
@@ -958,8 +956,8 @@ bd_addr_t FlashLog::findPacketTailBefore(bd_addr_t curPacketTailAddr, struct pac
         
 
 #ifdef FL_DEBUG
-        pc.printf("[findPacketTailBefore] Provided Packet is Valid\r\n");
-        printPacketTail(curPacketTail, pc);
+        printf("[findPacketTailBefore] Provided Packet is Valid\r\n");
+        printPacketTail(curPacketTail);
 #endif
 
         if(tailDescribesValidPacket(prevPacketTail, *prevPacketTailAddr)){
@@ -976,9 +974,9 @@ bd_addr_t FlashLog::findPacketTailBefore(bd_addr_t curPacketTailAddr, struct pac
         searchStartAddress = curPacketTailAddr;
         memcpy(prevPacketTail, curPacketTail, sizeof(struct packet_tail));
 #ifdef FL_DEBUG
-        pc.printf("[findPacketTailBefore] Provided Packet is Invalid. Copying curPacketTail to prevPacketTail\r\n");
-        printPacketTail(curPacketTail, pc);
-		printPacketTail(prevPacketTail, pc);
+        printf("[findPacketTailBefore] Provided Packet is Invalid. Copying curPacketTail to prevPacketTail\r\n");
+        printPacketTail(curPacketTail);
+		printPacketTail(prevPacketTail);
 #endif
 
     }
@@ -995,7 +993,7 @@ bd_addr_t FlashLog::findPacketTailBefore(bd_addr_t curPacketTailAddr, struct pac
     }
 
 #ifdef FL_DEBUG
-        pc.printf("Searching byte by byte from 0x%" PRIX64 " to 0x%" PRIX64 "\r\n", searchStartAddress, searchEndAddress);
+        printf("Searching byte by byte from 0x%" PRIX64 " to 0x%" PRIX64 "\r\n", searchStartAddress, searchEndAddress);
 #endif
 
     // now iterate backwards, byte by byte, until we find a valid packet.
@@ -1004,7 +1002,7 @@ bd_addr_t FlashLog::findPacketTailBefore(bd_addr_t curPacketTailAddr, struct pac
     for(bd_addr_t tailAddress = searchStartAddress; tailAddress > searchEndAddress; )
     {
 #ifdef FL_DEBUG
-        pc.printf("Attempting to find packet from possible packet tail at 0x%" PRIX64 "\r\n", tailAddress);
+        printf("Attempting to find packet from possible packet tail at 0x%" PRIX64 "\r\n", tailAddress);
 #endif
 
         if(!tailDescribesValidPacket(prevPacketTail, tailAddress))
@@ -1027,8 +1025,8 @@ bd_addr_t FlashLog::findPacketTailBefore(bd_addr_t curPacketTailAddr, struct pac
         {
             // got one!
 #ifdef FL_DEBUG
-            pc.printf("Found a valid tail at %08" PRIX64 ".\r\n", tailAddress);
-            printPacketTail(prevPacketTail, pc);
+            printf("Found a valid tail at %08" PRIX64 ".\r\n", tailAddress);
+            printPacketTail(prevPacketTail);
 #endif
             *prevPacketTailAddr = tailAddress;
             return FL_SUCCESS;
@@ -1077,7 +1075,7 @@ FLResultCode FlashLog::packetIterator(uint8_t *type, void *buf, bool begin) {
         }
     }
     if(!dataExists) {
-        pc.printf("ERROR_EMPTY at 0x%016" PRIX64 "\r\n", nextPacketToRead);
+        printf("ERROR_EMPTY at 0x%016" PRIX64 "\r\n", nextPacketToRead);
         PRETTYPRINT_BYTES(buf, MAX_PACKET_LEN, nextPacketToRead);
         return FL_ERROR_EMPTY; // We read all 0xFF's
     }
@@ -1150,7 +1148,7 @@ FLResultCode FlashLog::packetIterator(uint8_t *type, void *buf, bool begin) {
 FLResultCode FlashLog::readLastPacket (uint8_t type, void *buf) {
     bd_addr_t lastPacketAddr = nextPacketAddr - getPacketLen(type);
 #ifdef FL_DEBUG
-  pc.printf("reading from last packet, type %" PRIX8 ": %" PRIX64 "\n\r", type, lastTailAddr);
+  printf("reading from last packet, type %" PRIX8 ": %" PRIX64 "\n\r", type, lastTailAddr);
     #endif //FL_DEBUG
     return readFromLog(buf, lastPacketAddr, getPacketLen(type));
 }
@@ -1167,19 +1165,19 @@ void FlashLog::printLastNBytes (size_t nBytesPre, size_t nBytesPost)
     bd_addr_t startaddr = (nextPacketAddr - nBytesPre);
     for (bd_addr_t i=startaddr >= logStart ? startaddr : logStart; i<nextPacketAddr; i++) {
         readFromLog(&byte, i, 1);
-      if (i==lastTailAddr) pc.printf("\r\n[lastTailAddr]\r\n");
-        if ((i-nextPacketAddr)%16 == 0) pc.printf("\r\n[%016" PRIX64 "]: ", i);
-      else if ((i-nextPacketAddr)%4 == 0) pc.printf("-");
-      pc.printf("%02x", byte);
+      if (i==lastTailAddr) printf("\r\n[lastTailAddr]\r\n");
+        if ((i-nextPacketAddr)%16 == 0) printf("\r\n[%016" PRIX64 "]: ", i);
+      else if ((i-nextPacketAddr)%4 == 0) printf("-");
+      printf("%02x", byte);
     }
-    pc.printf("\r\n[nextPacketAddr]\r\n");
+    printf("\r\n[nextPacketAddr]\r\n");
     for (bd_addr_t i=nextPacketAddr; i<nextPacketAddr+nBytesPost; i++) {
         readFromLog(&byte, i, 1);
-        if ((i-nextPacketAddr)%16 == 0) pc.printf("\r\n[%016" PRIX64 "]: ", i);
-      else if ((i-nextPacketAddr)%4 == 0) pc.printf("-");
-      pc.printf("%02x", byte);
+        if ((i-nextPacketAddr)%16 == 0) printf("\r\n[%016" PRIX64 "]: ", i);
+      else if ((i-nextPacketAddr)%4 == 0) printf("-");
+      printf("%02x", byte);
     }
-    pc.printf("\r\n");
+    printf("\r\n");
 }
 
 /* returns a pointer to the enclosing packet given its tail struct
@@ -1296,7 +1294,7 @@ int FlashLog::findTailInBuffer(uint8_t *buf, size_t len, bool reverse) {
         inc = -1;
     }
     for (; i!=i_end; i+=inc) {
-        // pc.printf("findTailInBuffer() i=%d, i_end=%d, inc=%d\r\n", i, i_end, inc);
+        // printf("findTailInBuffer() i=%d, i_end=%d, inc=%d\r\n", i, i_end, inc);
       mag1_candidate = (buf[i+1] << 8) | buf[i];   //accounts for endianness disagreement
       mag2_candidate = buf[i+2];
       if (mag1_candidate == LOG_PACKET_MAGIC1 && mag2_candidate == LOG_PACKET_MAGIC2) {
@@ -1305,7 +1303,7 @@ int FlashLog::findTailInBuffer(uint8_t *buf, size_t len, bool reverse) {
       }
     }
 #ifdef FL_DEBUG
-    pc.printf("Tail not found in buffer:\r\n");
+    printf("Tail not found in buffer:\r\n");
     PRINT_BYTES(buf, len);
 #endif
     return -1;

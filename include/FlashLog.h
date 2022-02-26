@@ -18,7 +18,6 @@
 
 #include <mbed.h>
 #include <BlockDevice.h>
-#include <Stream.h>
 
 // how far backward restoreFSMState() will look for a valid packet to read state info from
 #define MAX_PACKETS_TO_CHECK 10
@@ -96,9 +95,8 @@ public:
 	 * @brief      Constructs the object.
 	 *
 	 * @param      _blockDev   Block device to use to store data
-	 * @param      _pc  Output stream to print messages on
 	 */
-	FlashLog(BlockDevice & _blockDev, Stream & _pc);
+	FlashLog(BlockDevice & _blockDev);
 
 	/**
 	 * @brief      Destroys the object.
@@ -317,8 +315,6 @@ protected:
      * @return FL_SUCCESS or error code
      */
 	FLResultCode readFromLog(void *buffer, bd_addr_t addr, bd_size_t size);
-
-    Stream & pc;
 
     /**
      * The flash chip is a block device, and FlashLog is built on top of the block device

@@ -8,7 +8,6 @@
 #define PACKET_H
 
 #include <FlashLogConfig.h>
-#include <Stream.h>
 #include <inttypes.h>
 #include <mbed.h>
 
@@ -91,18 +90,18 @@ struct packet_tail
 #define PRINT_PACKET_BYTES(TYPE, PACKET_BUF)                                   \
     do                                                                         \
     {                                                                          \
-        pc.printf("[P:]");                                                     \
+        printf("[P:]");                                                     \
         for(size_t i_printpbytes = 0;                                          \
             i_printpbytes < getPacketLen(TYPE) - sizeof(struct packet_tail);   \
             i_printpbytes++)                                                   \
-            pc.printf("%02" PRIX8, ((uint8_t *)PACKET_BUF)[i_printpbytes]);    \
-        pc.printf("[T:]");                                                     \
+            printf("%02" PRIX8, ((uint8_t *)PACKET_BUF)[i_printpbytes]);    \
+        printf("[T:]");                                                     \
         for(size_t i_printpbytes =                                             \
                 getPacketLen(TYPE) - sizeof(struct packet_tail);               \
             i_printpbytes < getPacketLen(TYPE);                                \
             i_printpbytes++)                                                   \
-            pc.printf("%02" PRIX8, ((uint8_t *)PACKET_BUF)[i_printpbytes]);    \
-        pc.printf("\r\n");                                                     \
+            printf("%02" PRIX8, ((uint8_t *)PACKET_BUF)[i_printpbytes]);    \
+        printf("\r\n");                                                     \
     } while(0)
 
 // prints LEN bytes from BUF in hex
@@ -111,8 +110,8 @@ struct packet_tail
     {                                                                          \
         for(size_t i_printbytes = 0; i_printbytes < static_cast<size_t>(LEN);  \
             i_printbytes++)                                                    \
-            pc.printf("%02" PRIX8, ((char *)BUF)[i_printbytes]);               \
-        pc.printf("\r\n");                                                     \
+            printf("%02" PRIX8, ((char *)BUF)[i_printbytes]);               \
+        printf("\r\n");                                                     \
     } while(0)
 
 // neatly prints the contents of BUF in hex, divided into 64-bit chunks.
@@ -122,15 +121,15 @@ struct packet_tail
         for(size_t i_ppb = 0; i_ppb < static_cast<size_t>(LEN); i_ppb++)       \
         {                                                                      \
             if(i_ppb % 16 == 0)                                                \
-                pc.printf(                                                     \
+                printf(                                                     \
                     "\r\n[%08" PRIX32 "]: ",                                   \
                     static_cast<uint32_t>(i_ppb) +                             \
                         static_cast<uint32_t>(START_ADDR));                    \
             else if(i_ppb % 4 == 0)                                            \
-                pc.printf("-");                                                \
-            pc.printf("%02" PRIX8, ((char *)BUF)[i_ppb]);                      \
+                printf("-");                                                \
+            printf("%02" PRIX8, ((char *)BUF)[i_ppb]);                      \
         }                                                                      \
-        pc.printf("\r\n");                                                     \
+        printf("\r\n");                                                     \
     } while(0)
 /* 	Logs text-based info messages.
                 Data Size: 64 bytes
@@ -305,13 +304,13 @@ size_t getPacketLen(uint8_t type);
 const char *getPacketName(uint8_t type);
 
 /**
- * Print a packet tail to the given stream.
+ * Print a packet tail
  */
-void printPacketTail(struct packet_tail const *tail, Stream &pc);
+void printPacketTail(struct packet_tail const *tail);
 
 /**
- * Print a packet's data and tail to the given stream based on its type.
+ * Print a packet's data and tail based on its type.
  */
-void printPacket(void const *packetBytes, uint8_t packetType, Stream &pc);
+void printPacket(void const *packetBytes, uint8_t packetType);
 
 #endif

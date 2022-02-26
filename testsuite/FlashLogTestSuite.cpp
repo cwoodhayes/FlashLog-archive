@@ -8,12 +8,8 @@
 #include "FlashLogTestSuite.h"
 
 #include <mbed.h>
-#include <SerialStream.h>
 
 #include <string>
-
-BufferedSerial pcSerial(USBTX, USBRX, 115200);
-SerialStream<BufferedSerial> pcStream(pcSerial); // can't name it pc due to conflict with FlashLog class variable
 
 std::unique_ptr<FlashLogConfig::BlockDevice_t> harnessBlockDev = FlashLogConfig::constructBlockDevice();
 
@@ -21,7 +17,7 @@ std::unique_ptr<FlashLogConfig::BlockDevice_t> harnessBlockDev = FlashLogConfig:
  * @brief      Constructs the object.
  */
 FlashLogHarness::FlashLogHarness() :
-FlashLog(*harnessBlockDev, pcStream)
+FlashLog(*harnessBlockDev)
 {
     startTimers();
 
@@ -29,7 +25,7 @@ FlashLog(*harnessBlockDev, pcStream)
     int err = harnessBlockDev->init();
     if(err != BD_ERROR_OK)
 	{
-    	pc.printf("Failed to init block device, reports error %d\r\n", err);
+    	printf("Failed to init block device, reports error %d\r\n", err);
 	}
 }
 
@@ -38,15 +34,15 @@ int FlashLogHarness::test_chip_erase()
 {
     int err;
 
-    pc.printf("Chip initialized. Erasing\r\n");
+    printf("Chip initialized. Erasing\r\n");
     err = harnessBlockDev->erase(logStart, logEnd);
     if(err)
     {
-        pc.printf("erase error %d\r\n", err);
+        printf("erase error %d\r\n", err);
         return err;
     }
 
-    pc.printf("Starting to check chip erase...\r\n");
+    printf("Starting to check chip erase...\r\n");
     check_pattern(0xFFFFFFFF, logStart, logEnd);
 
     return 0;
@@ -56,20 +52,20 @@ int FlashLogHarness::test_chip_erase()
 #define PATTERN 0xdeadbeef
 int FlashLogHarness::test_chip_write_pattern()
 {
-    pc.printf("Starting to write pattern...\r\n");
+    printf("Starting to write pattern...\r\n");
     return write_pattern(PATTERN, logStart, logEnd);
 }
 
 int FlashLogHarness::test_chip_write_pattern_through_log()
 {
-	pc.printf("Starting to write pattern...\r\n");
+	printf("Starting to write pattern...\r\n");
 	return write_pattern_through_flashlog(PATTERN, logStart, logEnd);
 }
 
 
 int FlashLogHarness::test_chip_check_pattern()
 {
-    pc.printf("Starting to check pattern...\r\n");
+    printf("Starting to check pattern...\r\n");
     return check_pattern(PATTERN, logStart, logEnd);
 }
 
@@ -84,7 +80,7 @@ int FlashLogHarness::test_chip_write_packets()
 	std::pair<bd_error, FLResultCode> err = initLog();
     if (err.second == FL_ERROR_LOG_EXISTS)
     {
-        pc.printf("Warning: Log detected.\r\n");
+        printf("Warning: Log detected.\r\n");
     }
     else if (err.second == FL_ERROR_BD_INIT)
     {
@@ -92,7 +88,7 @@ int FlashLogHarness::test_chip_write_packets()
     }
 
     //write a bunch of packets to about a quarter of the log
-    pc.printf("Starting to write packets at %08" PRIu64 ".\r\n", logStart);
+    printf("Starting to write packets at %08" PRIu64 ".\r\n", logStart);
     int i_max = (getLogCapacity()) / (2*AVG_PACKET_SIZE);
     for (int i=0; i<i_max; i++)
     {
@@ -102,10 +98,10 @@ int FlashLogHarness::test_chip_write_packets()
         writePacket(type, buf, getPowerTimer(), getFlightTimer(), fsmState);
         if (i % (i_max/100) == 0)
         {
-            pc.printf("%.01f%%\r\n", ((double)i/i_max)*100);
+            printf("%.01f%%\r\n", ((double)i/i_max)*100);
         }
     }
-    pc.printf("%d packets written to memory. Please power cycle the board!\r\n", i_max);
+    printf("%d packets written to memory. Please power cycle the board!\r\n", i_max);
     return 0;
 }
 
@@ -119,7 +115,7 @@ int FlashLogHarness::test_chip_read_packets()
     bd_size_t i_max = (logEnd - logStart) / (2*AVG_PACKET_SIZE);
     int type, neq, len, addr = logStart;
 
-    pc.printf("Beginning to read packets at %08x...\r\n", addr);
+    printf("Beginning to read packets at %08x...\r\n", addr);
     for (bd_size_t i=0; i<i_max; i++) {       //TODO restore to i_max
         type = TP_LIST_TYPES[i % TP_LIST_SIZE];
         len = getPacketLen(type);
@@ -132,19 +128,19 @@ int FlashLogHarness::test_chip_read_packets()
         neq = strncmp((const char *)buf, (const char *)TP_LIST[i % TP_LIST_SIZE], len - sizeof(struct packet_tail));
         if (neq)
         {
-            pc.printf("[EXPECTED]");
+            printf("[EXPECTED]");
             PRETTYPRINT_BYTES(TP_LIST[i % TP_LIST_SIZE], len-sizeof(struct packet_tail), addr);
-            pc.printf("[ACTUAL]");
+            printf("[ACTUAL]");
             PRETTYPRINT_BYTES(buf, len, addr);
-            pc.printf("\r\n");
+            printf("\r\n");
         }
         if (i % (i_max/100) == 0)
         {
-            pc.printf("--%" PRIu64 "%%\r\n", (i*100)/i_max);
+            printf("--%" PRIu64 "%%\r\n", (i*100)/i_max);
         }
         addr += len;
     }
-    pc.printf("\n");
+    printf("\n");
     return 0;
 }
 
@@ -158,7 +154,7 @@ int FlashLogHarness::test_chip_iterate_packets()
 {
     char buf[MAX_PACKET_LEN];
     uint8_t type;
-    pc.printf("Iterating through packets in log:\r\n");
+    printf("Iterating through packets in log:\r\n");
     int valid;
     #ifdef MAX_PACKETS_TO_ITERATE
     int iteration_ctr=0;
@@ -169,7 +165,7 @@ int FlashLogHarness::test_chip_iterate_packets()
         #ifdef MAX_PACKETS_TO_ITERATE
         if (++iteration_ctr == MAX_PACKETS_TO_ITERATE)
         {
-            pc.printf("Ending CHIP_ITERATE_PACKETS -- printed %d packets\r\n", i);
+            printf("Ending CHIP_ITERATE_PACKETS -- printed %d packets\r\n", i);
             return 0;
         }
         #endif  //MAX_PACKETS_TO_ITERATE
@@ -182,7 +178,7 @@ int FlashLogHarness::test_chip_iterate_packets()
     		printf("\r\nFormatted data is:\r\n");
             #endif  //PRINT_PACKETS
 
-    		printPacket(buf, type, pc);
+    		printPacket(buf, type);
     		break;
     	case FL_ERROR_CHECKSUM:
     		printf("Error: Invalid checksum or fake magic constant.\r\n");
@@ -199,7 +195,7 @@ int FlashLogHarness::test_chip_iterate_packets()
         }
         if (valid != FL_SUCCESS)
         {
-            pc.printf("Buffer contents which caused error:");
+            printf("Buffer contents which caused error:");
             PRETTYPRINT_BYTES(buf, MAX_PACKET_LEN, nextPacketToRead);
         }
     }
@@ -214,7 +210,7 @@ int FlashLogHarness::test_chip_iterate_packets()
 		printf("Fatal Error: Unrecognized error code: %d\r\n\r\n", valid);
 		break;
     }
-    pc.printf("Test complete.\r\n");
+    printf("Test complete.\r\n");
     return 0;
 }
 
@@ -229,32 +225,32 @@ int FlashLogHarness::test_write_bad_packet()
 	std::pair<bd_error, FLResultCode> err = initLog();
     if (err.second == FL_ERROR_LOG_EXISTS)
     {
-        pc.printf("restoring pre-existing log\r\n");
+        printf("restoring pre-existing log\r\n");
         uint64_t restoredPowerTimer;
         uint64_t restoredFlightTimer;
         FLResultCode restoreErr = restoreFSMState(&fsmState, &restoredPowerTimer, &restoredFlightTimer);
         if (restoreErr != FL_SUCCESS)
         {
-            pc.printf("restoreFSMState exited with error %d\r\n", restoreErr);
+            printf("restoreFSMState exited with error %d\r\n", restoreErr);
         }
         else
 		{
-			pc.printf("Log restored state as powerTimer=%" PRIu64 ", flightTimer=%" PRIu64 ", state=%s\r\n", restoredPowerTimer, restoredFlightTimer, FlashLogConfig::getStateName(fsmState));
+			printf("Log restored state as powerTimer=%" PRIu64 ", flightTimer=%" PRIu64 ", state=%s\r\n", restoredPowerTimer, restoredFlightTimer, FlashLogConfig::getStateName(fsmState));
 		}
     }
     else if (err.second == FL_ERROR_BD_INIT)
     {
-        pc.printf("SPIF driver problem. exiting.\r\n");
+        printf("SPIF driver problem. exiting.\r\n");
         return -1;
     }
     else 
     {
-        pc.printf("Log empty.\r\n");
+        printf("Log empty.\r\n");
     }
     //write a packet that's 1 byte short to simulate a sudden power loss
     harnessBlockDev->program(&tp_text, nextPacketAddr, sizeof(tp_text) - 1);
     printLastNBytes(0x100, 0x70);
-    pc.printf("Packet partially written. Please power cycle and run brownout_recovery test\r\n");
+    printf("Packet partially written. Please power cycle and run brownout_recovery test\r\n");
     return 0;
 }
 
@@ -268,9 +264,9 @@ int FlashLogHarness::test_brownout_recovery()
     if (err.second == FL_ERROR_LOG_EXISTS)
     {
         fsmState = FlashLogConfig::harnessExampleState;
-        pc.printf("PRE-RESTORE:\tflightTimer = %" PRIu64 "us;\t", getFlightTimer());
-        pc.printf("powerTimer = %" PRIu64 "us;\t", getPowerTimer());
-        pc.printf("fsmState = %s\r\n", FlashLogConfig::getStateName(fsmState));
+        printf("PRE-RESTORE:\tflightTimer = %" PRIu64 "us;\t", getFlightTimer());
+        printf("powerTimer = %" PRIu64 "us;\t", getPowerTimer());
+        printf("fsmState = %s\r\n", FlashLogConfig::getStateName(fsmState));
 
 
         uint64_t restoredPowerTimer;
@@ -290,21 +286,21 @@ int FlashLogHarness::test_brownout_recovery()
 			flightTimer.start();
         }
 
-		pc.printf("POST-RESTORE:\tflightTimer = %" PRIu64 "us;\t", getFlightTimer());
-		pc.printf("powerTimer = %" PRIu64 "us;\t", getPowerTimer());
-        pc.printf("fsmState = %s\r\n", FlashLogConfig::getStateName(fsmState));
+		printf("POST-RESTORE:\tflightTimer = %" PRIu64 "us;\t", getFlightTimer());
+		printf("powerTimer = %" PRIu64 "us;\t", getPowerTimer());
+        printf("fsmState = %s\r\n", FlashLogConfig::getStateName(fsmState));
         printLastNBytes(0x50, 0x50);
-        pc.printf("restoreFSMState exited with error %d\r\n", err);
+        printf("restoreFSMState exited with error %d\r\n", err);
         return err;
     }
     else if (err.second == FL_ERROR_BD_INIT)
     {
-        pc.printf("SPIFBlockDevice driver init error.\r\n");
+        printf("SPIFBlockDevice driver init error.\r\n");
         return -1;
     }
     else
     {
-        pc.printf("BROWNOUT_RECOVERY test FAIL: log not found \r\n");
+        printf("BROWNOUT_RECOVERY test FAIL: log not found \r\n");
         return -2;
     }
     
@@ -322,16 +318,16 @@ int FlashLogHarness::test_wipe_log(bool completeErase)
 	std::pair<bd_error, FLResultCode> err = initLog();
     if (err.second == FL_ERROR_LOG_EXISTS)
     {
-        pc.printf("Wiping an existing log...\r\n");
+        printf("Wiping an existing log...\r\n");
     }
     else if (err.second == FL_ERROR_BD_INIT)
     {
-        pc.printf("SPIFBlockDevice driver init error.\r\n");
+        printf("SPIFBlockDevice driver init error.\r\n");
 		return err.second;
 	}
     else
     {
-        pc.printf("Log is empty, but wiping it anyway...\r\n");
+        printf("Log is empty, but wiping it anyway...\r\n");
     }
 
 	float prevProgress = 0;
@@ -339,7 +335,7 @@ int FlashLogHarness::test_wipe_log(bool completeErase)
 	{
 		if(progress - prevProgress > 0.1f)
 		{
-			pc.printf("(%.02f%%)\r\n", progress);
+			printf("(%.02f%%)\r\n", progress);
 			prevProgress = progress;
 		}
 	});
@@ -350,43 +346,52 @@ int FlashLogHarness::test_wipe_log(bool completeErase)
 
 int FlashLogHarness::test_dump_hex()
 {
-    pc.printf("Dumping entirety of log into hex...\r\n<hexdump>\r\n");
+    printf("Dumping entirety of log into hex...\r\n<hexdump>\r\n");
     static struct log_binary_dump_frame frame;
     FLASHLOG_BINARY_ITERATE(this, frame)
     {
         PRINT_BYTES(&frame, sizeof(log_binary_dump_frame));
     }
-    pc.printf("</hexdump>\r\n");
+    printf("</hexdump>\r\n");
     return 0;
 }
 
 struct log_binary_dump_frame frame;
-int FlashLogHarness::test_dump_binary(Stream &pc)
+int FlashLogHarness::test_dump_binary()
 {
-	pcSerial.set_baud(921600);
+    /* Extract the default FileHandle and perform operations on it */
+    BufferedSerial* pc = (BufferedSerial*)(mbed_file_handle(STDOUT_FILENO));
+
+    fflush(stdout);
+    ThisThread::sleep_for(100ms);
+    pc->set_baud(921600);
 
 	// Give the PC time to switch its baudrate
 	ThisThread::sleep_for(100ms);
 
-    pc.printf("Dumping entirety of log into binary...\r\n<bindump>\r\n");
+    printf("Dumping entirety of log into binary...\r\n<bindump>\r\n");
     FLASHLOG_BINARY_ITERATE(this, frame)
     {
        for (size_t i=0; i<sizeof(log_binary_dump_frame); i++)
        {
-            pc.putc(((char*)&frame)[i]);
+            printf("%c", ((char*)&frame)[i]);
        } 
     }
-    pc.printf("</bindump>\r\n");
-	pcSerial.set_baud(115200);
+    printf("</bindump>\r\n");
+
+    fflush(stdout);
+    ThisThread::sleep_for(100ms);
+    pc->set_baud(115200);
+
 	return 0;
 }
 
 int FlashLogHarness::test_check_erase()
 {
-    pc.printf("Confirming erase FL_SUCCESSful...\r\n");
+    printf("Confirming erase FL_SUCCESSful...\r\n");
     int mismatches = check_pattern(0xFFFFFFFF, logStart, logEnd);
-    (mismatches == 0) ? pc.printf("[PASS] ") : pc.printf("[FAIL] ");
-    pc.printf("%d errors found.\r\n", mismatches);
+    (mismatches == 0) ? printf("[PASS] ") : printf("[FAIL] ");
+    printf("%d errors found.\r\n", mismatches);
     return mismatches;
 }
 int FlashLogHarness::test_checksum()
@@ -400,16 +405,16 @@ int FlashLogHarness::test_checksum()
     buf_len = buf_len-sizeof(struct packet_tail)+offsetof(struct packet_tail, checksum);
     populatePacketTail(LOG_TEXT, sizeof(tp_text), buf);
 
-    pc.printf("Calculating checksum of the following:\r\n");
+    printf("Calculating checksum of the following:\r\n");
     PRINT_BYTES(buf, buf_len);
     uint32_t checksum = 0;
     crc32(buf, buf_len, &checksum);
-    pc.printf("checksum: %08lu (0x%08x)\r\n", checksum, checksum);
+    printf("checksum: %08lu (0x%08x)\r\n", checksum, checksum);
     */
     populatePacketTail(LOG_TEXT, sizeof(tp_text), &tp_text, 0, 0, FlashLogConfig::harnessExampleState);
     PRINT_BYTES(&tp_text, sizeof(tp_text)-sizeof(struct packet_tail)+offsetof(struct packet_tail, checksum));
-    pc.printf("checksum: %08lu (0x%08lx)\r\n", tp_text.tail.checksum, tp_text.tail.checksum);
-    pc.printf("Check the value above against an online crc32 calculator to confirm correct result.\r\n");
+    printf("checksum: %08lu (0x%08lx)\r\n", tp_text.tail.checksum, tp_text.tail.checksum);
+    printf("Check the value above against an online crc32 calculator to confirm correct result.\r\n");
     return 1;
 }
 
@@ -443,13 +448,13 @@ int FlashLogHarness::write_pattern(uint32_t pattern, bd_addr_t start_addr, bd_si
         int err = harnessBlockDev->program(buf, i, blockSize);
         if (err)
         {
-            pc.printf("Write error at 0x%08" PRIX64 ".\r\n", i);
+            printf("Write error at 0x%08" PRIX64 ".\r\n", i);
             return -1;
         }
         //update a status bar every now and again
         if (++cur_step % print_threshold == 0)
         {
-            pc.printf("(%.3f%%)\r\n", ((float)cur_step * 100 / (float)num_steps));
+            printf("(%.3f%%)\r\n", ((float)cur_step * 100 / (float)num_steps));
         }
     }
     return 0;
@@ -489,7 +494,7 @@ int FlashLogHarness::write_pattern_through_flashlog(uint32_t pattern, const bd_a
 		int err = writeToLog(buf, i, (nextStartAddr - i));
 		if (err)
 		{
-			pc.printf("Write error at 0x%08" PRIX64 ".\r\n", i);
+			printf("Write error at 0x%08" PRIX64 ".\r\n", i);
 			return -1;
 		}
 
@@ -498,7 +503,7 @@ int FlashLogHarness::write_pattern_through_flashlog(uint32_t pattern, const bd_a
 		//update a status bar every now and again
 		if (++cur_step % print_threshold == 0)
 		{
-			pc.printf("(%.3f%%)\r\n", static_cast<float>(i - start_addr)/static_cast<float>(len)*100);
+			printf("(%.3f%%)\r\n", static_cast<float>(i - start_addr)/static_cast<float>(len)*100);
 		}
 
 		// change block size (increment or reset)
@@ -520,7 +525,7 @@ int FlashLogHarness::check_pattern(uint32_t pattern, bd_addr_t start_addr, bd_si
         int err = harnessBlockDev->read(buf, i, blockSize);
         if (err)
         {
-            pc.printf("Read error at 0x%08" PRIX64 " .\r\n", i);
+            printf("Read error at 0x%08" PRIX64 " .\r\n", i);
             return -1;
         }
         // check 4 bytes at a time
@@ -528,14 +533,14 @@ int FlashLogHarness::check_pattern(uint32_t pattern, bd_addr_t start_addr, bd_si
         {
             if(reinterpret_cast<uint32_t *>(buf)[j] != pattern)
             {
-                pc.printf("[0x%08x] MISMATCH -- expected 0x%08" PRIX32 " -- recieved 0x%08" PRIX32 "\r\n", static_cast<unsigned int>(i+j), pattern, ((uint32_t *)buf)[j]);
+                printf("[0x%08x] MISMATCH -- expected 0x%08" PRIX32 " -- recieved 0x%08" PRIX32 "\r\n", static_cast<unsigned int>(i+j), pattern, ((uint32_t *)buf)[j]);
                 mismatch_cnt++;
             }
         }
         //update a status bar every now and again
         if (++cur_step % print_threshold == 0)
         {
-            pc.printf("(%.3f%%)\r\n", ((float)cur_step * 100 / (float)num_steps));
+            printf("(%.3f%%)\r\n", ((float)cur_step * 100 / (float)num_steps));
         }
     }
     return mismatch_cnt;
@@ -543,13 +548,13 @@ int FlashLogHarness::check_pattern(uint32_t pattern, bd_addr_t start_addr, bd_si
 
 int FlashLogHarness::test_writeAtLargeAddress(){
 
-    pc.printf("Chip initialized. \r\n");
-    pc.printf("MAX SIZE: %" PRIx64 "\r\n", logEnd);
+    printf("Chip initialized. \r\n");
+    printf("MAX SIZE: %" PRIx64 "\r\n", logEnd);
     uint32_t buf = 0xdeadbeef;
     harnessBlockDev->program(&buf, 0x03FFFFF0, 4);
     uint32_t frame;
     harnessBlockDev->read(&frame, 0x03FFFFF0, 4);
-    pc.printf("Read %08" PRIx32 "\r\n", frame);
+    printf("Read %08" PRIx32 "\r\n", frame);
     return 0;
 }
 
@@ -562,7 +567,7 @@ int FlashLogHarness::test_bulkErase(){
     }
     else
     {
-        pc.printf("Bulk erase not implemented!\r\n");
+        printf("Bulk erase not implemented!\r\n");
     }
 
     return 0;
@@ -580,20 +585,20 @@ int FlashLogHarness::test_avoid_partial_packet_tail()
 	std::pair<bd_error, FLResultCode> err = initLog();
     if (err.second == FL_ERROR_LOG_EXISTS)
     {
-        pc.printf("found pre-existing log\r\n");
+        printf("found pre-existing log\r\n");
     }
     else if (err.second == FL_ERROR_BD_INIT)
     {
-        pc.printf("SPIF driver problem. exiting.\r\n");
+        printf("SPIF driver problem. exiting.\r\n");
         return -1;
     }
     else 
     {
-        pc.printf("Log empty.\r\n");
+        printf("Log empty.\r\n");
     }
-    pc.printf("Writing bad data starting at 0x%" PRIx64 "\r\n", nextPacketAddr);
+    printf("Writing bad data starting at 0x%" PRIx64 "\r\n", nextPacketAddr);
     harnessBlockDev->program(badDataString, nextPacketAddr, sizeof(badDataString) - 1);
-    pc.printf("Bad packet written. Please power cycle and run brownout_recovery test\r\n");
+    printf("Bad packet written. Please power cycle and run brownout_recovery test\r\n");
     return 0;
 }
 
@@ -612,38 +617,38 @@ int flash_test_main()
     while(1)
     {
         int test=-1;
-        pcStream.printf("\r\n\nHamster Flash Test Suite:\r\n");
+        printf("\r\n\nHamster Flash Test Suite:\r\n");
 
         //MENU. ADD AN OPTION FOR EACH TEST.
-        pcStream.printf("Select a test: \n\r");
-        pcStream.printf("1.  Exit test suite\r\n");
-        pcStream.printf("2.  Chip Erase\r\n");
-        pcStream.printf("3.  Chip Write Pattern\r\n");
-        pcStream.printf("4.  Chip Check Pattern\r\n");
-        pcStream.printf("5.  Chip Write Packets\r\n");
-        pcStream.printf("6.  Chip Check Packets\r\n");
-        pcStream.printf("7.  Chip Iterate Packets\r\n");
-        pcStream.printf("8.  Write Bad Packet\r\n");
-        pcStream.printf("9.  Brownout Recovery\r\n");
-        pcStream.printf("10. Confirm Brownout Recovery\r\n");
-        pcStream.printf("11. Wipe Log\r\n");
-        pcStream.printf("12. Dump Hex Data\r\n");
-        pcStream.printf("13. Dump Binary Data\r\n");
-		pcStream.printf("14. Chip Write Pattern through Log\r\n");
-		pcStream.printf("15. Test checksum\r\n");
-        pcStream.printf("16. Check Erase\r\n");
-        pcStream.printf("17. Write at Large Address\r\n");
-        pcStream.printf("18. Bulk Erase\r\n");
-        pcStream.printf("19. Write Magic Bad Packet\r\n");
-		pcStream.printf("20. Wipe Log (Dirty Part Only)\r\n");
+        printf("Select a test: \n\r");
+        printf("1.  Exit test suite\r\n");
+        printf("2.  Chip Erase\r\n");
+        printf("3.  Chip Write Pattern\r\n");
+        printf("4.  Chip Check Pattern\r\n");
+        printf("5.  Chip Write Packets\r\n");
+        printf("6.  Chip Check Packets\r\n");
+        printf("7.  Chip Iterate Packets\r\n");
+        printf("8.  Write Bad Packet\r\n");
+        printf("9.  Brownout Recovery\r\n");
+        printf("10. Confirm Brownout Recovery\r\n");
+        printf("11. Wipe Log\r\n");
+        printf("12. Dump Hex Data\r\n");
+        printf("13. Dump Binary Data\r\n");
+		printf("14. Chip Write Pattern through Log\r\n");
+		printf("15. Test checksum\r\n");
+        printf("16. Check Erase\r\n");
+        printf("17. Write at Large Address\r\n");
+        printf("18. Bulk Erase\r\n");
+        printf("19. Write Magic Bad Packet\r\n");
+		printf("20. Wipe Log (Dirty Part Only)\r\n");
 
-        pcStream.scanf("%d", &test);
-        pcStream.printf("Running test %d:\r\n\n", test);
+        scanf("%d", &test);
+        printf("Running test %d:\r\n\n", test);
 
         //SWITCH. ADD A CASE FOR EACH TEST.
         switch(test)
         {
-            case 1:         pcStream.printf("Exiting test suite.\r\n");   return 0;
+            case 1:         printf("Exiting test suite.\r\n");            return 0;
             case 2:         harness.test_chip_erase();                    break;
             case 3:         harness.test_chip_write_pattern();            break;
             case 4:         harness.test_chip_check_pattern();            break;
@@ -655,7 +660,7 @@ int flash_test_main()
             case 10:        harness.test_brownout_recovery_confirm();     break;
             case 11:        harness.test_wipe_log(true);                  break;
             case 12:        harness.test_dump_hex();                      break;
-            case 13:        harness.test_dump_binary(pcStream);           break;
+            case 13:        harness.test_dump_binary();                   break;
             case 14: 		harness.test_chip_write_pattern_through_log();break;
             case 15:        harness.test_checksum();                      break;
             case 16:        harness.test_check_erase();                   break;
@@ -663,10 +668,10 @@ int flash_test_main()
             case 18:        harness.test_bulkErase();                     break;
             case 19:        harness.test_avoid_partial_packet_tail();     break;
 			case 20:        harness.test_wipe_log(false);                 break;
-			default:        pcStream.printf("Invalid test number. Please run again.\r\n"); return 1;
+			default:        printf("Invalid test number. Please run again.\r\n"); return 1;
         }
 
-        pcStream.printf("done.\r\n");
+        printf("done.\r\n");
     }
 }
 
