@@ -59,8 +59,11 @@ std::pair<bd_error, FLResultCode> FlashLog::initLog() {
       printf("block device erase size: 0x%" PRIX64 "\r\n",   blockDev.get_erase_size());
 #endif
 
+	// if we want to reduce size, take that divisor from the FlashLogConfig, otherwise don't divide
+	const uint64_t sizeDivisor = FlashLogConfig::reduceSize ? FlashLogConfig::sizeDivisor : 1;
+
 	// detect log size from block device
-	logEnd = blockDev.size() / FlashLogConfig::sizeDivisor;
+	logEnd = blockDev.size() / sizeDivisor;
 
     if(!FlashLogConfig::isSPIFlash)
     {	
@@ -720,11 +723,11 @@ void FlashLog::printPacketsReport(const uint8_t NUM_PACKETS_TO_FIND){
         if (i == LOG_TEXT || i == LOG_INVALID){ continue; }
 
         if(packetsFound[i-1] > 0){
-            printf("%-13s AVG Data Rate: [%4" PRId32 "ms] : %3" PRIu32 " found\r\n", 
+            printf("%-13s AVG Data Rate: [%5" PRId32 "ms] : %3" PRIu32 " found\r\n",
                 getPacketName(i), packetDeltaAvg[i-1], packetsFound[i-1]);
         }
         else{
-             printf("%-13s AVG Data Rate: [   0ms]\r\n", "SENSOR_IMU");
+            printf("%-13s AVG Data Rate: [    0ms] :   0 found\r\n", getPacketName(i));
         }
     }
     printf("======================================\r\n\r\n");

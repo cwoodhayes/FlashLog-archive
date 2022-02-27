@@ -634,16 +634,19 @@ int flash_test_main()
         printf("11. Wipe Log\r\n");
         printf("12. Dump Hex Data\r\n");
         printf("13. Dump Binary Data\r\n");
-		printf("14. Chip Write Pattern through Log\r\n");
-		printf("15. Test checksum\r\n");
+        printf("14. Chip Write Pattern through Log\r\n");
+        printf("15. Test checksum\r\n");
         printf("16. Check Erase\r\n");
         printf("17. Write at Large Address\r\n");
         printf("18. Bulk Erase\r\n");
         printf("19. Write Magic Bad Packet\r\n");
-		printf("20. Wipe Log (Dirty Part Only)\r\n");
+        printf("20. Wipe Log (Dirty Part Only)\r\n");
 
         scanf("%d", &test);
         printf("Running test %d:\r\n\n", test);
+
+        // Clean up garbage characters
+        getc(stdin);
 
         //SWITCH. ADD A CASE FOR EACH TEST.
         switch(test)
@@ -661,14 +664,14 @@ int flash_test_main()
             case 11:        harness.test_wipe_log(true);                  break;
             case 12:        harness.test_dump_hex();                      break;
             case 13:        harness.test_dump_binary();                   break;
-            case 14: 		harness.test_chip_write_pattern_through_log();break;
+            case 14:        harness.test_chip_write_pattern_through_log();break;
             case 15:        harness.test_checksum();                      break;
             case 16:        harness.test_check_erase();                   break;
             case 17:        harness.test_writeAtLargeAddress();           break;
             case 18:        harness.test_bulkErase();                     break;
             case 19:        harness.test_avoid_partial_packet_tail();     break;
-			case 20:        harness.test_wipe_log(false);                 break;
-			default:        printf("Invalid test number. Please run again.\r\n"); return 1;
+            case 20:        harness.test_wipe_log(false);                 break;
+            default:        printf("Invalid test number. Please run again.\r\n"); return 1;
         }
 
         printf("done.\r\n");
