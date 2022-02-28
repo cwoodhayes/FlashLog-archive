@@ -324,8 +324,8 @@ protected:
 	// The addresses that the FlashLog runs between on the flash device
 	bd_addr_t logStart;
 	bd_addr_t logEnd; // 1 greater than the largest accessible address
-	bd_size_t blockSize; // Reading and writing must be done in blocks of at least this size
-	bd_size_t eraseBlockSize; // Erasing must be done in blocks of at least this size
+	bd_size_t blockSize; // Reading and writing must be done in blocks of a multiple of this size
+	bd_size_t eraseBlockSize; // Erasing must be done in blocks of a multiple of this size
 
 	bd_addr_t nextPacketAddr;		//next empty address in the log
 	bd_addr_t nextPacketToRead;	//next packet in a read-through of the log

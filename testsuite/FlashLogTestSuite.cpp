@@ -29,13 +29,23 @@ FlashLog(*harnessBlockDev)
 	}
 }
 
-/* Call wipeLog(), attempt to use log iterator to read, and confirm 0 packets read. */
+/* Attempt to erase the whole chip (up until #logEnd) in one BlockDevice::erase call */
 int FlashLogHarness::test_chip_erase()
 {
     int err;
 
     printf("Chip initialized. Erasing\r\n");
-    err = harnessBlockDev->erase(logStart, logEnd);
+    /* The address we want to erase to must be a multiple of the erase size of the device. We want
+     * to get the next address that is a multiple of the erase size, so we "round up" (but note that
+     * if our address is exactly a multiple of the erase size, we should not increase our erase
+     * address). Use integer division rounding to our advantage here:
+     * (int)N / (int)D = floor((float)N / (float)D)), so (aN+x)/N = a (x < N), and
+     * ((a-1)N + x-1+N)/N = a, (x <= N) */
+    const bd_addr_t eraseSize
+        = (((logEnd - 1 + harnessBlockDev->get_erase_size()) / harnessBlockDev->get_erase_size())
+              * harnessBlockDev->get_erase_size())
+        - logStart;
+    err = harnessBlockDev->erase(logStart, eraseSize);
     if(err)
     {
         printf("erase error %d\r\n", err);
