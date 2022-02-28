@@ -438,24 +438,32 @@ void FlashLogHarness::startTimers(uint64_t offset)
     powerTimerOffset = offset + 1e6;
 }
 
+template <typename T, size_t SIZE>
+static inline constexpr size_t arr_sizeof(const T (&arr)[SIZE]) noexcept
+{
+    return SIZE;
+}
+
 int FlashLogHarness::write_pattern(uint32_t pattern, bd_addr_t start_addr, bd_size_t len)
 {
     static uint32_t buf[FlashLogConfig::maxBlockSize / 4]; // divide byte block size by 4 because buffer is 32 bit ints
+    static constexpr size_t buf_size = arr_sizeof(buf);
+
     //fill the buf with the repeating pattern
-    for (bd_size_t i=0; i<blockSize / 4; i++)
+    for (bd_size_t i=0; i<buf_size / 4; i++)
     {
         buf[i] = pattern;
     }
 
     //write the buf to the memory over and over. Writes big chunks to minimize use of the SPI line.
     //rounds down the len to align with the nearest 0x100'th byte
-    bd_size_t num_steps = len / blockSize;
+    bd_size_t num_steps = len / buf_size;
     uint32_t print_threshold = num_steps / 100;
     bd_addr_t cur_step = 0;
-    for (bd_addr_t i = start_addr; (i+blockSize)<(start_addr+len); i+=blockSize)
+    for (bd_addr_t i = start_addr; (i+buf_size)<(start_addr+len); i+=buf_size)
     {
         //write 256 bytes in a chunk
-        int err = harnessBlockDev->program(buf, i, blockSize);
+        int err = harnessBlockDev->program(buf, i, buf_size);
         if (err)
         {
             printf("Write error at 0x%08" PRIX64 ".\r\n", i);
@@ -472,11 +480,11 @@ int FlashLogHarness::write_pattern(uint32_t pattern, bd_addr_t start_addr, bd_si
 
 int FlashLogHarness::write_pattern_through_flashlog(uint32_t pattern, const bd_addr_t start_addr, const bd_size_t len)
 {
-	const bd_size_t writeBlockSize = 2 * blockSize;
-
 	static uint32_t buf[(2*FlashLogConfig::maxBlockSize) / 4]; // divide byte block size by 4 because buffer is 32 bit ints
+    static constexpr size_t buf_size = arr_sizeof(buf);
+
 	//fill the buf with the repeating pattern
-	for (bd_size_t i=0; i<writeBlockSize / 4; i++)
+	for (bd_size_t i=0; i<buf_size / 4; i++)
 	{
 		buf[i] = pattern;
 	}
@@ -517,7 +525,7 @@ int FlashLogHarness::write_pattern_through_flashlog(uint32_t pattern, const bd_a
 		}
 
 		// change block size (increment or reset)
-		programBlockSize = (programBlockSize % writeBlockSize) + sizeof(uint32_t);
+		programBlockSize = (programBlockSize % buf_size) + sizeof(uint32_t);
 	}
 	return 0;
 }
@@ -525,25 +533,27 @@ int FlashLogHarness::write_pattern_through_flashlog(uint32_t pattern, const bd_a
 int FlashLogHarness::check_pattern(uint32_t pattern, bd_addr_t start_addr, bd_size_t len)
 {
     static char buf[FlashLogConfig::maxBlockSize];
+    static constexpr size_t buf_size = arr_sizeof(buf);
+
     int mismatch_cnt = 0;
     //rounds down the len to align with the nearest 0x100'th byte
-    uint32_t num_steps = len / blockSize;
+    uint32_t num_steps = len / buf_size;
     uint32_t print_threshold = num_steps / 100;
     uint32_t cur_step = 0;
-    for (bd_addr_t i=start_addr; i+blockSize<start_addr+len; i+=blockSize)
+    for (bd_addr_t i=start_addr; i+buf_size<start_addr+len; i+=buf_size)
     {
-        int err = harnessBlockDev->read(buf, i, blockSize);
+        int err = harnessBlockDev->read(buf, i, buf_size);
         if (err)
         {
             printf("Read error at 0x%08" PRIX64 " .\r\n", i);
             return -1;
         }
         // check 4 bytes at a time
-        for (bd_size_t j=0; j<blockSize / 4; j++)
+        for (bd_size_t j=0; j<buf_size / 4; j++)
         {
             if(reinterpret_cast<uint32_t *>(buf)[j] != pattern)
             {
-                printf("[0x%08x] MISMATCH -- expected 0x%08" PRIX32 " -- recieved 0x%08" PRIX32 "\r\n", static_cast<unsigned int>(i+j), pattern, ((uint32_t *)buf)[j]);
+                printf("[0x%08x] MISMATCH -- expected 0x%08" PRIX32 " -- received 0x%08" PRIX32 "\r\n", static_cast<unsigned int>(i+j), pattern, ((uint32_t *)buf)[j]);
                 mismatch_cnt++;
             }
         }
