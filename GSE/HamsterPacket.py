@@ -67,7 +67,7 @@ packet_format = [  # See Packet.h for these struct declarations
     r"<2d4iIH10B",  # gps
     r"<fifi",  # baro
     r"",  # invalid
-    r"<f4Bff",  # power
+    r"<ffff",  # power
     r"<7fH2B",  # adis
     r"<dfB3x",  # rangefinder
 ]
@@ -145,13 +145,10 @@ baro_fields = ["altitude", "pressure", "temperature", "PAD"]
 invalid_fields = ["err_data"]
 
 power_fields = [
-    "battVoltage",
-    "chargePercent",
-    "PAD",
-    "PAD",
-    "PAD",
-    "battCurrent",
-    "reg5VCurrent",
+    "current3V",
+    "current5V",
+    "voltage3V",
+    "voltage5V",
 ]
 
 adis_fields = [

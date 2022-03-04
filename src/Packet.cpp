@@ -123,8 +123,11 @@ void printPacket(void const * packetBytes, uint8_t packetType)
 		case LOG_POWER:
 		{
 			auto lppower = reinterpret_cast<struct log_packet_power const *>(packetBytes);
-			printf("battVoltage=%.02f\tbattCurrent=%.03f\treg5VCurrent=%.02f\tchargePercent=%" PRIu8 "\r\n",
-			 	lppower->battVoltage, lppower->battCurrent, lppower->reg5VCurrent, lppower->chargePercent);
+			printf("current3V=%.03f\tcurrent5V=%.03f\tvoltage3V=%.02f\tvoltage5V=%.02f\r\n",
+ 				lppower->current3V,
+ 				lppower->current5V,
+ 				lppower->voltage3V,
+ 				lppower->voltage5V);
 			printPacketTail(&lppower->tail);
 		}
 		break;

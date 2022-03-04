@@ -223,7 +223,11 @@ def statePacketFrequency(packets):
         # print (tail[6], prevState)
         # 1st element is packet type
 
-        curTailState = HamsterPacket.packet_state[tail[TAIL_STATE]]
+        curTailState = "__error__"
+        try:
+            curTailState = HamsterPacket.packet_state[tail[TAIL_STATE]]
+        except IndexError as idx_err:
+            print(f"Invalid tail index: {tail[TAIL_STATE]} ({idx_err})")
         curTailType = str(tail[TAIL_TYPE])
 
         if tail[TAIL_CHECKSUM_STATUS] != "OK":

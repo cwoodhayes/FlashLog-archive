@@ -266,12 +266,11 @@ struct log_packet_accel tp_accel
 
 struct log_packet_power tp_power
 {
-	12.0, //battVoltage
-	50, //chargePercent
-	.123, //battCurrent
-	.120 //reg5VCurrent
+    .123,     // current3V
+        .120, // current5V
+        2.9f, // voltage3V
+        4.9f  // voltage5V
 };
-
 
 #define TP_LIST1_SIZE 7
 void *tp_list1[TP_LIST1_SIZE] = {

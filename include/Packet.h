@@ -233,12 +233,10 @@ struct log_packet_accel
 */
 struct log_packet_power
 {
-    float battVoltage; // voltage of battery in V
-    uint8_t
-        chargePercent; // charge percentage of battery as an integer from 0-100
-    /* 3 bytes padding */
-    float battCurrent;  // total current used from battery in A
-    float reg5VCurrent; // current used on the 5V regulated bus in A
+    float current3V; // current on the 3.3V rail in A
+    float current5V; // current on the 5V rail in A
+    float voltage3V; // voltage on the 3V rail in V
+    float voltage5V; // voltage on the 5V rail in V
     struct packet_tail tail;
 };
 
