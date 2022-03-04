@@ -69,7 +69,7 @@ packet_format = [  # See Packet.h for these struct declarations
     r"",  # invalid
     r"<f4Bff",  # power
     r"<7fH2B",  # adis
-    r'<dfB3x', #rangefinder
+    r"<dfB3x",  # rangefinder
 ]
 
 
@@ -109,27 +109,36 @@ bno_fields = [
     "quatY",
     "quatZ",
     "quatW",
-
     "ax",
     "ay",
     "az",
     "magX",
-
     "magY",
     "magZ",
     "calib",
     "stability",
-
     "PAD",
-    "PAD"
+    "PAD",
 ]
 gps_fields = [
     "latitude",
     "longitude",
-    "height", "northVel",
-    "eastVel","downVel",
-    "posAccuracy","year", "month", "day",
-    "hour", "minute", "second", "numSatellites", "fixQuality", "PAD", "PAD", "PAD"
+    "height",
+    "northVel",
+    "eastVel",
+    "downVel",
+    "posAccuracy",
+    "year",
+    "month",
+    "day",
+    "hour",
+    "minute",
+    "second",
+    "numSatellites",
+    "fixQuality",
+    "PAD",
+    "PAD",
+    "PAD",
 ]
 
 baro_fields = ["altitude", "pressure", "temperature", "PAD"]
@@ -137,22 +146,31 @@ invalid_fields = ["err_data"]
 
 power_fields = [
     "battVoltage",
-    "chargePercent", "PAD", "PAD", "PAD",
+    "chargePercent",
+    "PAD",
+    "PAD",
+    "PAD",
     "battCurrent",
     "reg5VCurrent",
 ]
 
 adis_fields = [
-    "gyrox", "gyroy",
-    "gyroz", "ax",
-    "ay", "az",
-    "temp", "datacnt", "PAD", "PAD",
+    "gyrox",
+    "gyroy",
+    "gyroz",
+    "ax",
+    "ay",
+    "az",
+    "temp",
+    "datacnt",
+    "PAD",
+    "PAD",
 ]
 
 rangefinder_fields = [
-	"distance",
-	"rssi",
-	"linkQual",
+    "distance",
+    "rssi",
+    "linkQual",
 ]
 
 packet_fields = [

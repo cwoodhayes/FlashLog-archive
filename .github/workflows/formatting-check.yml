@@ -1,0 +1,16 @@
+name: Formatting Check
+
+on: [pull_request, push]
+
+jobs:
+  check_formatting:
+    name: Check formatting
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v2
+
+      - name: Python formatting check with Black
+        uses: jpetrucciani/black-check@master
+        with:
+          path: "GSE/"

@@ -7,25 +7,26 @@ class Peak:
     def get_persistence(self, seq):
         return float("inf") if self.died is None else seq[self.born] - seq[self.died]
 
+
 def get_persistent_homology(seq):
     peaks = []
     # Maps indices to peaks
     idxtopeak = [None for s in seq]
     # Sequence indices sorted by values
     indices = range(len(seq))
-    indices = sorted(indices, key = lambda i: seq[i], reverse=True)
+    indices = sorted(indices, key=lambda i: seq[i], reverse=True)
 
     # Process each sample in descending order
     for idx in indices:
-        lftdone = (idx > 0 and idxtopeak[idx-1] is not None)
-        rgtdone = (idx < len(seq)-1 and idxtopeak[idx+1] is not None)
-        il = idxtopeak[idx-1] if lftdone else None
-        ir = idxtopeak[idx+1] if rgtdone else None
+        lftdone = idx > 0 and idxtopeak[idx - 1] is not None
+        rgtdone = idx < len(seq) - 1 and idxtopeak[idx + 1] is not None
+        il = idxtopeak[idx - 1] if lftdone else None
+        ir = idxtopeak[idx + 1] if rgtdone else None
 
         # New peak born
         if not lftdone and not rgtdone:
             peaks.append(Peak(idx))
-            idxtopeak[idx] = len(peaks)-1
+            idxtopeak[idx] = len(peaks) - 1
 
         # Directly merge to next peak left
         if lftdone and not rgtdone:
