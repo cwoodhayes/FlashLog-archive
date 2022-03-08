@@ -174,9 +174,9 @@ FLResultCode FlashLog::findLastPacket() {
         if (isPacket) start = middle;
         else end = middle;
 
-        if (Watchdog::get_instance.is_running()) 
+        if (Watchdog::get_instance().is_running()) 
         {
-            Watchdog::get_instance.kick(); // feeds watchdog
+            Watchdog::get_instance().kick(); // feeds watchdog
         }
     }
 
