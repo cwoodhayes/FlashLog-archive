@@ -173,6 +173,11 @@ FLResultCode FlashLog::findLastPacket() {
         //if we found a packet, search higher addresses. Else, search lower addresses.
         if (isPacket) start = middle;
         else end = middle;
+
+        if (Watchdog::get_instance.is_running()) 
+        {
+            Watchdog::get_instance.kick(); // feeds watchdog
+        }
     }
 
     if(middle == (logEnd - searchBlockSize) && !isPacket){
