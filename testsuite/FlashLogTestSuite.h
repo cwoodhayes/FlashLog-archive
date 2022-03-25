@@ -132,10 +132,17 @@ class FlashLogHarness : public FlashLog
 		/**
 		 * @brief      Confirm that the flashlog's checksum calculator is working
 		 *
+		 * @tparam T We use a template parameter here as a way to enforce that only one branch of
+		 *           the constexpr-if statement is parsed by the compiler. This template argument is
+		 *           never used, but T is used in the function to make the compiler respect our
+		 *           constexpr-if. For more information on why this is necessary, see
+		 *           https://stackoverflow.com/questions/50051473/if-constexpr-in-c17-does-not-work-in-a-non-templated-function
+		 *
 		 * @return     err
 		 */
+		template <typename T = FlashLogConfig::BlockDevice_t>
 		int test_bulkErase();
-		
+
 		/**
 		 * @brief      Confirm that 32 bit addressing works
 		 *

@@ -578,24 +578,26 @@ int FlashLogHarness::test_writeAtLargeAddress(){
     return 0;
 }
 
+/* If SPIFBlockDevice is not defined anywhere, forward-declare it */
+class SPIFBlockDevice;
+
+template <typename T>
 int FlashLogHarness::test_bulkErase()
 {
-    /* If SPIFBlockDevice is not defined anywhere, pre-declare it */
-    class SPIFBlockDevice;
-
     /* Check if the type of the block device is a SPIFBlockDevice */
-    static constexpr bool IS_SPIFBLOCKDEVICE
-        = std::is_same<FlashLogConfig::BlockDevice_t, SPIFBlockDevice>();
-    (void)IS_SPIFBLOCKDEVICE; // ignore non-used warning
+    constexpr bool IS_SPIFBLOCKDEVICE = std::is_same<SPIFBlockDevice, T>();
 
-/* Use compile-time checks to see if we can use SPIFBlockDevice::bulk_erase */
-#if IS_SPIFBLOCKDEVICE
-    SPIFBlockDevice *spiFlashDev = reinterpret_cast<SPIFBlockDevice*>(harnessBlockDev.get());
-    spiFlashDev->bulk_erase();
-    test_check_erase();
-#else
-    printf("Bulk erase not implemented!\r\n");
-#endif
+    /* Use compile-time checks to see if we can use SPIFBlockDevice::bulk_erase */
+    if constexpr (IS_SPIFBLOCKDEVICE)
+    {
+        T* spiFlashDev = reinterpret_cast<T*>(harnessBlockDev.get());
+        spiFlashDev->bulk_erase();
+        test_check_erase();
+    }
+    else
+    {
+        printf("Bulk erase not implemented!\r\n");
+    }
 
     return 0;
 }

@@ -34,3 +34,5 @@ target_include_directories(flashlog PUBLIC ${CONFIG_HEADER_DIR})
 add_mbed_executable(test_flash ${TEST_FLASH_SOURCES})
 target_link_libraries(test_flash flashlog ${FLASHLOG_TEST_HARNESS_LIBRARIES})
 target_compile_options(test_flash PRIVATE -Wno-unknown-pragmas)
+
+target_compile_features(test_flash PRIVATE cxx_std_17)
