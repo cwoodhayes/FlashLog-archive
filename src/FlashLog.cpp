@@ -1045,8 +1045,6 @@ bd_addr_t FlashLog::findPacketTailBefore(bd_addr_t curPacketTailAddr, struct pac
             *prevPacketTailAddr = tailAddress;
             return FL_SUCCESS;
         }
-
-        
     }
     return FL_ERROR_NOTAIL;
 }
