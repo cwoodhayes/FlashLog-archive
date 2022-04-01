@@ -950,7 +950,7 @@ bd_addr_t FlashLog::findPacketTailBefore(bd_addr_t curPacketTailAddr, struct pac
         //compute the previous packet address from this.
 
         // check to make sure we don't start before the beginning of the log
-        if (curPacketTailAddr < logStart + getPacketLen(curPacketTail->typeID))
+        if (curPacketTailAddr - getPacketLen(curPacketTail->typeID) < logStart)
         {
 #ifdef FL_DEBUG
             printf("[findPacketTailBefore] Next Packet will Underflow. NOTAIL");
@@ -1026,6 +1026,12 @@ bd_addr_t FlashLog::findPacketTailBefore(bd_addr_t curPacketTailAddr, struct pac
 
                 // now read the new byte
                 readFromLog(prevPacketTail, tailAddress, 1);
+
+                // feed the watchdog
+                if (Watchdog::get_instance().is_running()) 
+                {
+                    Watchdog::get_instance().kick(); 
+                }
             }
             //else, the loop condition will trigger and exit the for loop
         }
@@ -1039,6 +1045,8 @@ bd_addr_t FlashLog::findPacketTailBefore(bd_addr_t curPacketTailAddr, struct pac
             *prevPacketTailAddr = tailAddress;
             return FL_SUCCESS;
         }
+
+        
     }
     return FL_ERROR_NOTAIL;
 }
