@@ -950,7 +950,7 @@ bd_addr_t FlashLog::findPacketTailBefore(bd_addr_t curPacketTailAddr, struct pac
         //compute the previous packet address from this.
 
         // check to make sure we don't start before the beginning of the log
-        if (curPacketTailAddr - getPacketLen(curPacketTail->typeID) < logStart)
+        if (curPacketTailAddr < logStart + getPacketLen(curPacketTail->typeID))
         {
 #ifdef FL_DEBUG
             printf("[findPacketTailBefore] Next Packet will Underflow. NOTAIL");
