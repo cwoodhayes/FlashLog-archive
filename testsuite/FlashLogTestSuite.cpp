@@ -12,6 +12,17 @@
 #include <string>
 
 std::unique_ptr<FlashLogConfig::BlockDevice_t> harnessBlockDev = FlashLogConfig::constructBlockDevice();
+std::unique_ptr<FlashLogConfig::FileHandle_t> serialPort = FlashLogConfig::constructFileHandle();
+
+/**
+ * @brief Override (retarget) the console with file handle specified in FlashLogConfig
+ *
+ * This lets calls like `printf` and `scanf` work with the correct output device.
+ */
+FileHandle* mbed::mbed_override_console(int fd)
+{
+    return serialPort.get();
+}
 
 /**
  * @brief      Constructs the object.
@@ -369,12 +380,9 @@ int FlashLogHarness::test_dump_hex()
 struct log_binary_dump_frame frame;
 int FlashLogHarness::test_dump_binary()
 {
-    /* Extract the default FileHandle and perform operations on it */
-    BufferedSerial* pc = (BufferedSerial*)(mbed_file_handle(STDOUT_FILENO));
-
     fflush(stdout);
     ThisThread::sleep_for(100ms);
-    pc->set_baud(921600);
+    serialPort->set_baud(921600);
 
 	// Give the PC time to switch its baudrate
 	ThisThread::sleep_for(100ms);
@@ -385,13 +393,13 @@ int FlashLogHarness::test_dump_binary()
        for (size_t i=0; i<sizeof(log_binary_dump_frame); i++)
        {
             printf("%c", ((char*)&frame)[i]);
-       } 
+       }
     }
     printf("</bindump>\r\n");
 
     fflush(stdout);
     ThisThread::sleep_for(100ms);
-    pc->set_baud(115200);
+    serialPort->set_baud(115200);
 
 	return 0;
 }
