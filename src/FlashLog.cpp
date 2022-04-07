@@ -173,6 +173,11 @@ FLResultCode FlashLog::findLastPacket() {
         //if we found a packet, search higher addresses. Else, search lower addresses.
         if (isPacket) start = middle;
         else end = middle;
+
+        if (Watchdog::get_instance().is_running()) 
+        {
+            Watchdog::get_instance().kick(); // feeds watchdog
+        }
     }
 
     if(middle == (logEnd - searchBlockSize) && !isPacket){
@@ -1021,6 +1026,12 @@ bd_addr_t FlashLog::findPacketTailBefore(bd_addr_t curPacketTailAddr, struct pac
 
                 // now read the new byte
                 readFromLog(prevPacketTail, tailAddress, 1);
+
+                // feed the watchdog
+                if (Watchdog::get_instance().is_running()) 
+                {
+                    Watchdog::get_instance().kick(); 
+                }
             }
             //else, the loop condition will trigger and exit the for loop
         }
