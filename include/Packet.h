@@ -40,7 +40,8 @@
 #define LOG_POWER         0x08
 #define LOG_ADIS          0x09
 #define LOG_RANGEFINDER   0x0A
-#define LOG_END_TYPEID    0x0B
+#define LOG_BQZ           0x0B
+#define LOG_END_TYPEID    0x0C
 
 #define LOG_PACKET_MAGIC1 0xAAAA
 #define LOG_PACKET_MAGIC2 0xAA
@@ -265,6 +266,15 @@ struct log_packet_rangefinder
     // 3 bytes pad waste
     struct packet_tail tail;
 };
+
+/**
+ * @brief Logs BQ34Z100 Battery Gauge packets
+ * Data Size: 1 byte
+ */
+struct log_packet_bqz {
+    uint8_t charge; // percentage of full charge remaining
+    struct packet_tail tail;
+}
 
 /*	Logs nothing--exists to pad the end of a block
                 Size: 1 byte

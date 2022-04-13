@@ -6,15 +6,16 @@
 
 size_t getPacketLen(uint8_t type) {
 	switch (type) {
-		case LOG_TEXT:         return sizeof(struct log_packet_text);
-		case LOG_TEMP:         return sizeof(struct log_packet_temp);
-		case LOG_ACCEL:     return sizeof(struct log_packet_accel);
-		case LOG_BNO:         return sizeof(struct log_packet_bno);
-		case LOG_GPS:         return sizeof(struct log_packet_gps);
-		case LOG_BARO:         return sizeof(struct log_packet_baro);
-		case LOG_POWER:        return sizeof(struct log_packet_power);
-		case LOG_ADIS:        return sizeof(struct log_packet_adis);
-		case LOG_RANGEFINDER: return sizeof(struct log_packet_rangefinder);
+		case LOG_TEXT:         	return sizeof(struct log_packet_text);
+		case LOG_TEMP:         	return sizeof(struct log_packet_temp);
+		case LOG_ACCEL:     	return sizeof(struct log_packet_accel);
+		case LOG_BNO:         	return sizeof(struct log_packet_bno);
+		case LOG_GPS:         	return sizeof(struct log_packet_gps);
+		case LOG_BARO:         	return sizeof(struct log_packet_baro);
+		case LOG_POWER:        	return sizeof(struct log_packet_power);
+		case LOG_ADIS:        	return sizeof(struct log_packet_adis);
+		case LOG_RANGEFINDER: 	return sizeof(struct log_packet_rangefinder);
+		case LOG_BQZ:           return sizeof(struct log_packet_bqz);
 		default:
 			return 0;
 	}
@@ -32,9 +33,9 @@ const char* getPacketName(uint8_t type)
 		case LOG_POWER:        return "POWER";
 		case LOG_ADIS:         return "ADIS";
 		case LOG_RANGEFINDER:  return "RANGEFINDER";
+		case LOG_BQZ:          return "BQZ";
         default:               return "Unknown Packet";
 	}
-
 }
 
 void printPacketTail(struct packet_tail const * tail)
@@ -143,8 +144,16 @@ void printPacket(void const * packetBytes, uint8_t packetType)
 		{
 			auto lprange = reinterpret_cast<struct log_packet_rangefinder const *>(packetBytes);
 			printf("distance=%.02f\trssi=%.01f\tlqi=%" PRIi8 "\r\n",
-					  lprange->distance, lprange->rssi, lprange->linkQual);
+				lprange->distance, lprange->rssi, lprange->linkQual);
 			printPacketTail(&lprange->tail);
+		}
+		break;
+		case LOG_BQZ:
+		{
+			auto lpbqz = reinterpret_cast<struct log_packet_bqz const *>(packetBytes);
+			printf("charge=%d%%\r\n",
+				bqz->charge);
+			printPacketTail(&lpbqz->tail);
 		}
 		break;
 		default:
