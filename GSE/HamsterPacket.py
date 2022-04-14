@@ -35,6 +35,8 @@ packet_state = [
     "DESCENT",
     "DROGUES_FIRING",
     "DROGUES_FIRED",
+    "MAIN_DEPLOY",
+    "MAIN_DEPLOYED",
     "DUMP",
     "NONE",
     "END_ENUM_STATE",
