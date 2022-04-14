@@ -17,6 +17,7 @@ packet_name = [
     "POWER",
     "ADIS",
     "RANGEFINDER",
+    "BQZ",
 ]
 
 # packet state list
@@ -70,6 +71,7 @@ packet_format = [  # See Packet.h for these struct declarations
     r"<ffff",  # power
     r"<7fH2B",  # adis
     r"<dfB3x",  # rangefinder
+    r"<BH5x",  # bqz
 ]
 
 
@@ -170,6 +172,12 @@ rangefinder_fields = [
     "linkQual",
 ]
 
+bqz_fields = [
+    "charge",
+    "voltage",
+    "PAD",
+]
+
 packet_fields = [
     error_fields,
     text_fields,
@@ -182,6 +190,7 @@ packet_fields = [
     power_fields,
     adis_fields,
     rangefinder_fields,
+    bqz_fields,
 ]
 
 # other constants

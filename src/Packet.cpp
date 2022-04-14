@@ -151,7 +151,7 @@ void printPacket(void const * packetBytes, uint8_t packetType)
 		case LOG_BQZ:
 		{
 			auto lpbqz = reinterpret_cast<struct log_packet_bqz const *>(packetBytes);
-			printf("charge=%d%%\r\n", lpbqz->charge);
+			printf("charge=%d%%\tvoltage=%d\r\n", lpbqz->charge, lpbqz->voltage);
 			printPacketTail(&lpbqz->tail);
 		}
 		break;
