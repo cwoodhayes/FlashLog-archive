@@ -274,7 +274,7 @@ struct log_packet_rangefinder
 struct log_packet_bqz {
     uint8_t charge; // percentage of full charge remaining
     struct packet_tail tail;
-}
+};
 
 /*	Logs nothing--exists to pad the end of a block
                 Size: 1 byte
