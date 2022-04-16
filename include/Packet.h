@@ -269,13 +269,14 @@ struct log_packet_rangefinder
 
 /**
  * @brief Logs BQ34Z100 Battery Gauge packets
- * Data Size: 8 bytes
+ * Data Size: 16 bytes
  */
-struct log_packet_bqz {
+struct log_packet_bqz
+{
     double temp;         // 8 bytes
     int16_t current;     // 2 bytes
-    uint16_t voltage;    // 2 bytes 
-    uint8_t charge;      // 1 byte 
+    uint16_t voltage;    // 2 bytes
+    uint8_t charge;      // 1 byte
     uint8_t is_charging; // 1 byte
     // 2 bytes pad waste
     struct packet_tail tail;

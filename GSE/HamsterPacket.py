@@ -73,7 +73,7 @@ packet_format = [  # See Packet.h for these struct declarations
     r"<ffff",  # power
     r"<7fH2B",  # adis
     r"<dfB3x",  # rangefinder
-    r"<d2H2B2x",  # bqz
+    r"<dhH2B2x",  # bqz
 ]
 
 
