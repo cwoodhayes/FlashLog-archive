@@ -73,7 +73,7 @@ packet_format = [  # See Packet.h for these struct declarations
     r"<ffff",  # power
     r"<7fH2B",  # adis
     r"<dfB3x",  # rangefinder
-    r"<H2B4x",  # bqz
+    r"<d2H2B2x",  # bqz
 ]
 
 
@@ -175,11 +175,11 @@ rangefinder_fields = [
 ]
 
 bqz_fields = [
+    "temp",
+    "current",
     "voltage",
     "charge",
     "is_charging",
-    "PAD",
-    "PAD",
     "PAD",
     "PAD",
 ]

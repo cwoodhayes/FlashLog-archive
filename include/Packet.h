@@ -272,10 +272,12 @@ struct log_packet_rangefinder
  * Data Size: 8 bytes
  */
 struct log_packet_bqz {
+    double temp;         // 8 bytes
+    int16_t current;     // 2 bytes
     uint16_t voltage;    // 2 bytes 
     uint8_t charge;      // 1 byte 
     uint8_t is_charging; // 1 byte
-    // 4 bytes pad waste
+    // 2 bytes pad waste
     struct packet_tail tail;
 };
 
