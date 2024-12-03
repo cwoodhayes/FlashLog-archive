@@ -5,3 +5,5 @@ Quick info:
 - Packets are written with checksums for error detection--since this was used on a space vehicle, in which bit errors are common due to radiation exposure
 - Flashlog can quickly recover system state in log(n) time using binary search in case of power outage
 - Flashlog can dump its contents for data recovery purposes. Packets are parsed by an accompanying python script.
+
+GSE folder contains the parsing & support scripts, and src contains the firmware
